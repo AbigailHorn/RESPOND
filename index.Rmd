@@ -6,6 +6,8 @@ output:
         toc_float: TRUE
 ---
 
+<br>
+
 # To do if using this website
 
 * Rerender the html reports using the css style sheet in the root directory of this website so that the top banner is included and “Home” can be seen
@@ -17,12 +19,6 @@ output:
   * Remove the generic pieces (keep only pieces specific to a given site)
   * Use `formattable` to make nicer looking tables
   * Add some figures
-
-<br>
-
-# Some nice interactive visual
-
-Add something helpful here, maybe a map of all sites?
 
 <br>
 
@@ -39,6 +35,13 @@ Add something helpful here, maybe a map of all sites?
 
 ## [Louisiana](testing/html-test/Louisiana.html)
 
+<br>
+
+# Some nice interactive visual
+
+Add something helpful here, maybe a map of all sites?
+
+<br>
 
 <br>
 
