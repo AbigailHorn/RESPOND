@@ -1,0 +1,23 @@
+---
+title: "Testing fragment"
+output: html_fragment
+# output: 
+#     html_fragment:
+#         toc: TRUE
+#         toc_float: TRUE
+---
+
+## Users: Please select a site report
+
+* Select a site from the drop-down menu
+* Use the navigation bar to find the section of the report you're interested in
+
+## Developers: Notes to improve this 
+
+* Fix formatting
+  - Narrower side panel
+  - Navigation bar floating *under* the side panel?
+
+* Clean up html site reports
+  - Remove generic content (like the site numbers at the top)
+  - Make prettier

@@ -1,0 +1,11 @@
+name: html-test
+title:
+username:
+account: abigail-horn
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 5240302
+bundleId: 5313921
+url: https://abigail-horn.shinyapps.io/html-test/
+when: 1638358302.04791
+lastSyncTime: 1638358302.04793

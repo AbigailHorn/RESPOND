@@ -1,0 +1,58 @@
+---
+title: "RESPOND Site Analysis"
+output: 
+    html_document:
+        toc: TRUE
+        toc_float: TRUE
+---
+
+<br>
+
+# Some nice interactive visual
+
+Add something helpful here, maybe a map of all sites?
+
+<br>
+
+
+# Detailed site reports
+
+## [Georgia](testing/html-test/Georgia.html)
+
+## [Los Angeles County](testing/html-test/LAC.html)
+
+## [Northern California](testing/html-test/NorCal.html)
+
+## [Michigan](testing/html-test/Michigan.html)
+
+## [Louisiana](testing/html-test/Louisiana.html)
+
+
+<br>
+
+```{r setup, message=FALSE, echo=FALSE, warning=FALSE}
+
+library(data.table)
+library(tidyverse)
+library(dplyr)
+library(plotly)
+library(DT)
+library(knitr)
+
+# Initialize code chunk options
+opts_chunk$set(
+  warning = FALSE,
+  message = FALSE,
+  eval=TRUE,
+  echo = TRUE,
+  cache = FALSE,
+  fig.width = 7, 
+  fig.align = 'center',
+  fig.asp = 0.618,
+  out.width = "700px",
+  class.source = "code-r")
+```
+
+
+<br>
+<br>
