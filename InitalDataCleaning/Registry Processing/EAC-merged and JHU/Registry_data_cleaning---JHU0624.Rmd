@@ -1,0 +1,1027 @@
+---
+title: "Registry cleaning report - JHU 0624"
+author: "Weijia Hu"
+date: "`r Sys.time()`"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    df_print: paged
+    code_folding: hide
+  pdf_document: default
+---
+
+```{r setup, include=FALSE, echo=FALSE}
+require("RPostgreSQL") # for PostgreSQL
+library(zoo) # for date conversion
+library(expss) # for labels
+library(DBI) # for Database connectivity
+library(summarytools) # for summarizing variables
+library(tidyverse)
+library(plyr)
+library(knitr) # for creating tables
+# set working directory
+#setwd("~/Google Drive File Stream/My Drive/Projects/RESPOND/CORE D/InitalDataCleaning")
+
+```
+
+```{r input registry data, echo=FALSE}
+load("vjhuid2_20210615.Rda")
+d_jhu <- vjhuid2
+load("vregall20210601.Rda")
+d_regall <- vregall
+
+colnames(d_jhu) <- "rid"
+
+d <- merge(d_jhu, d_regall,by="rid")
+```
+
+```{r first look - registry data - 30 vars, echo=FALSE}
+new.d <- data.frame(matrix(ncol=0, nrow=nrow(d)))
+new.d.n <- data.frame(matrix(ncol=0, nrow=nrow(d)))
+new.d.1 <- data.frame(matrix(ncol=0, nrow=nrow(d)))
+
+```
+
+```{r respondid}
+
+  respondid <- trimws(d[,"rid"])
+ 
+  new.d <- data.frame(new.d, respondid)
+  new.d <- apply_labels(new.d, respondid = "respond_id")
+  new.d.1 <- data.frame(new.d.1, respondid)
+  
+  #cro(new.d$siteid) # this is pretty but doesn't show NAs
+  #summary(new.d$siteid)
+  
+  #Using kable function to form a nice table
+
+```
+
+# SITE ID	
+- Codes
+   + 10 Greater CA
+   + 20 Georgia
+   + 25 North Carolina
+   + 30 Northern CA
+   + 40 Louisiana
+   + 50 New Jersey
+   + 60 Detroit
+   + 61 Michigan
+   + 70 Texas
+   + 80 Los Angeles County
+   + 81 USC-Other
+   + 82 USC-MEC
+   + 90 New York
+   + 94 Florida
+   + 95 WebRecruit-Limbo
+   + 99 WebRecruit
+
+<br>
+
+```{css, echo = FALSE}
+caption {
+      color: Black;
+      font-weight: bold;
+      font-size: 1.5em;
+      text-align: center
+    }
+```
+
+```{r siteid}
+
+  siteid <- as.factor(trimws(d[,"siteid"]))
+  #new.d.n <- data.frame(new.d.n, siteid) # keep NAACCR coding
+  
+  # NEED REGISTRY NAMES!!
+ 
+  
+  #replace number with names
+  
+  levels(siteid)[levels(siteid)=="80"] <- "Los Angeles County.80"
+  levels(siteid)[levels(siteid)=="30"] <- "Northern CA.30"
+  levels(siteid)[levels(siteid)=="10"] <- "Greater CA.10"
+  levels(siteid)[levels(siteid)=="60"] <- "Detroit.60"
+  levels(siteid)[levels(siteid)=="40"] <- "Louisiana.40"
+  levels(siteid)[levels(siteid)=="20"] <- "Georgia.20"
+  levels(siteid)[levels(siteid)=="61"] <- "Michigan.61"
+  
+  
+  new.d <- data.frame(new.d, siteid)
+  new.d <- apply_labels(new.d, siteid = "Site ID")
+  new.d.1 <- data.frame(new.d.1, siteid)
+  
+  #cro(new.d$siteid) # this is pretty but doesn't show NAs
+  #summary(new.d$siteid)
+  
+  #Using kable function to form a nice table
+  
+  siteid_count<-count(new.d$siteid)
+  colnames(siteid_count)<- c("Registry", "Total")
+  kable(siteid_count, format = "simple", align = 'l', caption = "Overview of 7 Registries")
+
+```
+
+<br>
+
+
+# MARITAL STATUS AT DX {.tabset}
+- Description: Code for the patient’s marital status at the time of diagnosis for the reportable tumor. If the patient has multiple tumors, marital status may be different for each tumor.
+- Rationale: Incidence and survival with certain cancers vary by marital status. The item also helps in patient identification.
+- Codes
+   + 1	Single (never married)
+   + 2	Married (including common law)
+   + 3	Separated
+   + 4	Divorced
+   + 5	Widowed
+   + 6	Unmarried or Domestic Partner (same sex or opposite sex, registered or unregistered, other than common law marriage)
+   + 9	Unknown
+- Reference page: http://datadictionary.naaccr.org/default.aspx?c=10&Version=18#150
+
+<br> 
+   
+## All data
+
+```{r maritalstatusatdx,,message=FALSE, results='asis'}
+st_css() #IMPORTANT!
+  #maritalstatusatdx <- as.factor(trimws(d[,"maritalstatusatdx"]))
+  maritalstatusatdx <- trimws(d[,"maritalstatusatdx"])
+  maritalstatusatdx[which(maritalstatusatdx=="9")]<-"NA"
+  maritalstatusatdx<-as.factor(maritalstatusatdx)
+  
+  levels(maritalstatusatdx)[levels(maritalstatusatdx)=="1"] <- "Single.1"
+  levels(maritalstatusatdx)[levels(maritalstatusatdx)=="2"] <- "Married.2"
+  levels(maritalstatusatdx)[levels(maritalstatusatdx)=="3"] <- "Separated.3"
+  levels(maritalstatusatdx)[levels(maritalstatusatdx)=="4"] <- "Divorced.4"
+  levels(maritalstatusatdx)[levels(maritalstatusatdx)=="5"] <- "Widowed.5"
+  levels(maritalstatusatdx)[levels(maritalstatusatdx)=="6"] <- "Unmarried_or_Domestic_Partner.6"
+  #levels(maritalstatusatdx)[levels(maritalstatusatdx)=="9"] <- "Unknown.9"
+
+
+  new.d <- data.frame(new.d, maritalstatusatdx)
+  new.d <- apply_labels(new.d, maritalstatusatdx = "marital_status_at_dx")
+  new.d.1 <- data.frame(new.d.1, maritalstatusatdx)
+  
+  #Using kable function to form a nice table
+  temp.d <- data.frame (new.d.1, maritalstatusatdx)
+  summarytools::view(dfSummary(new.d$maritalstatusatdx, style = 'grid',
+                               max.distinct.values = 100, plain.ascii =   FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+  
+```
+
+## LA County
+
+```{r maritalstatusatdx 1.LA County,echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Los Angeles County.80"), ]
+maritalstatusatdx<-as.data.frame(temp.dd$maritalstatusatdx)
+names(maritalstatusatdx)<-"marital_status_at_dx"
+summarytools::view(dfSummary(maritalstatusatdx, style = 'grid', max.distinct.values = 100, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE ), method = "render")
+rm(temp.dd)
+```
+
+## Northern CA
+
+```{r maritalstatusatdx 2.Northern CA,echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Northern CA.30"), ]
+maritalstatusatdx<-as.data.frame(temp.dd$maritalstatusatdx)
+names(maritalstatusatdx)<-"marital_status_at_dx"
+summarytools::view(dfSummary(maritalstatusatdx, style = 'grid', max.distinct.values = 100, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Greater CA
+
+```{r maritalstatusatdx 3.Greater CA,echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Greater CA.10"), ]
+maritalstatusatdx<-as.data.frame(temp.dd$maritalstatusatdx)
+names(maritalstatusatdx)<-"marital_status_at_dx"
+summarytools::view(dfSummary(maritalstatusatdx, style = 'grid', max.distinct.values = 100, plain.ascii = FALSE, valid.col = FALSE , headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Detroit
+
+```{r maritalstatusatdx 4.Detroit,echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Detroit.60"), ]
+maritalstatusatdx<-as.data.frame(temp.dd$maritalstatusatdx)
+names(maritalstatusatdx)<-"marital_status_at_dx"
+summarytools::view(dfSummary(maritalstatusatdx, style = 'grid', max.distinct.values = 100, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE ), method = "render")
+rm(temp.dd)
+```
+
+## Louisiana
+
+```{r maritalstatusatdx 5.Louisiana,echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Louisiana.40"), ]
+maritalstatusatdx<-as.data.frame(temp.dd$maritalstatusatdx)
+names(maritalstatusatdx)<-"marital_status_at_dx"
+summarytools::view(dfSummary(maritalstatusatdx, style = 'grid', max.distinct.values = 100, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE ), method = "render")
+rm(temp.dd)
+```
+
+## Georgia
+
+```{r maritalstatusatdx 6.Georgia,echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Georgia.20"), ]
+maritalstatusatdx<-as.data.frame(temp.dd$maritalstatusatdx)
+names(maritalstatusatdx)<-"marital_status_at_dx"
+summarytools::view(dfSummary(maritalstatusatdx, style = 'grid', max.distinct.values = 100, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE ), method = "render")
+rm(temp.dd)
+```
+
+## Michigan
+
+```{r maritalstatusatdx 7.Michigan,echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Michigan.61"), ]
+maritalstatusatdx<-as.data.frame(temp.dd$maritalstatusatdx)
+names(maritalstatusatdx)<-"marital_status_at_dx"
+summarytools::view(dfSummary(maritalstatusatdx, style = 'grid', max.distinct.values = 100, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+<br>
+
+# AGE AT DIAGNOSIS {.tabset}
+- Description: Age of the patient at diagnosis in complete years. Different tumors for the same patient may have different values.
+- Codes
+   + 000	Less than 1 year old; diagnosed in utero
+   + 001	1 year old, but less than 2 years
+   + 002	2 years old
+...
+   + 101	101 years old
+...
+   + 120	120 years old
+   + 999	Unknown age
+
+- Reference page: http://datadictionary.naaccr.org/default.aspx?c=10&Version=18#230
+
+<br> 
+  
+## All data
+
+```{r ageatdiagnosis,,message=FALSE, results='asis'}
+st_css() #IMPORTANT!
+  ageatdiagnosis <- trimws(d[,"ageatdiagnosis"])
+  ageatdiagnosis <- ifelse(ageatdiagnosis=="999", NA, ageatdiagnosis)
+  ageatdiagnosis <- as.numeric(ageatdiagnosis)
+  
+  new.d <- data.frame(new.d, ageatdiagnosis)
+  new.d <- apply_labels(new.d, ageatdiagnosis = "age_at_diagnosis")
+  new.d.1 <- data.frame(new.d.1, ageatdiagnosis)
+  
+  #Using kable function to form a nice table
+  temp.d <- data.frame (new.d.1, ageatdiagnosis)
+  summarytools::view(dfSummary(new.d$ageatdiagnosis, style = 'grid',
+                               max.distinct.values = 10, plain.ascii =   FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+```
+
+## LA County
+
+```{r ageatdiagnosis 1.LA County,echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Los Angeles County.80"), ]
+ageatdiagnosis<-as.data.frame(temp.dd$ageatdiagnosis)
+names(ageatdiagnosis)<-"age_at_diagnosis"
+summarytools::view(dfSummary(ageatdiagnosis, style = 'grid', max.distinct.values = 100, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE ), method = "render")
+rm(temp.dd)
+```
+
+## Northern CA
+
+```{r ageatdiagnosis 2.Northern CA,echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Northern CA.30"), ]
+ageatdiagnosis<-as.data.frame(temp.dd$ageatdiagnosis)
+names(ageatdiagnosis)<-"age_at_diagnosis"
+summarytools::view(dfSummary(ageatdiagnosis, style = 'grid', max.distinct.values = 100, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Greater CA
+
+```{r ageatdiagnosis 3.Greater CA,echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Greater CA.10"), ]
+ageatdiagnosis<-as.data.frame(temp.dd$ageatdiagnosis)
+names(ageatdiagnosis)<-"age_at_diagnosis"
+summarytools::view(dfSummary(ageatdiagnosis, style = 'grid', max.distinct.values = 100, plain.ascii = FALSE, valid.col = FALSE , headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Detroit
+
+```{r ageatdiagnosis 4.Detroit,echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Detroit.60"), ]
+ageatdiagnosis<-as.data.frame(temp.dd$ageatdiagnosis)
+names(ageatdiagnosis)<-"age_at_diagnosis"
+summarytools::view(dfSummary(ageatdiagnosis, style = 'grid', max.distinct.values = 100, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE ), method = "render")
+rm(temp.dd)
+```
+
+## Louisiana
+
+```{r ageatdiagnosis 5.Louisiana,echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Louisiana.40"), ]
+ageatdiagnosis<-as.data.frame(temp.dd$ageatdiagnosis)
+names(ageatdiagnosis)<-"age_at_diagnosis"
+summarytools::view(dfSummary(ageatdiagnosis, style = 'grid', max.distinct.values = 100, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE ), method = "render")
+rm(temp.dd)
+```
+
+## Georgia
+
+```{r ageatdiagnosis 6.Georgia,echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Georgia.20"), ]
+ageatdiagnosis<-as.data.frame(temp.dd$ageatdiagnosis)
+names(ageatdiagnosis)<-"age_at_diagnosis"
+summarytools::view(dfSummary(ageatdiagnosis, style = 'grid', max.distinct.values = 100, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE ), method = "render")
+rm(temp.dd)
+```
+
+## Michigan
+
+```{r ageatdiagnosis 7.Michigan,echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Michigan.61"), ]
+ageatdiagnosis<-as.data.frame(temp.dd$ageatdiagnosis)
+names(ageatdiagnosis)<-"age_at_diagnosis"
+summarytools::view(dfSummary(ageatdiagnosis, style = 'grid', max.distinct.values = 100, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+<br>
+
+# DATE OF BIRTH {.tabset}
+- Description: Date of birth of the patient. See Chapter X for date format. If age at diagnosis and year of diagnosis are known, but year of birth is unknown, then year of birth should be calculated and so coded. Only the year should be entered, left-justified. Estimate date of birth when information is not available. It is better to estimate than to leave birth date unknown.
+
+- date var
+- Reference page: http://datadictionary.naaccr.org/default.aspx?c=10&Version=18#240
+
+<br> 
+  
+## All data
+
+```{r dateofbirth,,message=FALSE, results='asis'}
+st_css() #IMPORTANT!
+  dateofbirth <- trimws(d[,"dateofbirth"])
+  select99 <- ifelse(is.na(dateofbirth), F, substr(dateofbirth, start=7, stop=8)=="99")
+  dateofbirth[select99] <- substr(dateofbirth[select99], start=1, stop=6)
+  
+  select6 <- ifelse(is.na(dateofbirth), F, nchar(trimws(dateofbirth))==6)
+  dateofbirth[select6] <- paste(dateofbirth[select6], "15", sep="")
+  
+  select4 <- ifelse(is.na(dateofbirth), F, nchar(trimws(dateofbirth))==4)
+  dateofbirth[select4] <- paste(dateofbirth[select4], "0615", sep="")
+  
+  dateofbirth <- as.Date(dateofbirth, c("%Y%m%d"))
+  
+  new.d <- data.frame(new.d, dateofbirth)
+  new.d <- apply_labels(new.d, dateofbirth = "date_of_birth")
+  #new.d.1 <- data.frame(new.d.1, dateofbirth)
+  
+  #Using kable function to form a nice table
+  temp.d <- data.frame (new.d.1, dateofbirth)
+  summarytools::view(dfSummary(new.d$dateofbirth, style = 'grid',
+                               max.distinct.values = 5, plain.ascii =   FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+```
+## LA County
+```{r dateofbirth 1.LA County, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Los Angeles County.80"), ]
+dateofbirth<-as.data.frame(temp.dd$dateofbirth)
+names(dateofbirth)<-"date_of_birth"
+summarytools::view(dfSummary(dateofbirth, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE , headings = FALSE), method = "render")
+rm(temp.dd)
+```
+## Northern CA
+```{r dateofbirth 2.Northern CA, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Northern CA.30"), ]
+dateofbirth<-as.data.frame(temp.dd$dateofbirth)
+names(dateofbirth)<-"date_of_birth"
+summarytools::view(dfSummary(dateofbirth, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE , headings = FALSE), method = "render")
+rm(temp.dd)
+```
+## Greater CA
+```{r dateofbirth 3.Greater CA, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Greater CA.10"), ]
+dateofbirth<-as.data.frame(temp.dd$dateofbirth)
+names(dateofbirth)<-"date_of_birth"
+summarytools::view(dfSummary(dateofbirth, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE , headings = FALSE), method = "render")
+rm(temp.dd)
+```
+## Detroit
+```{r dateofbirth 4.Detroit, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Detroit.60"), ]
+dateofbirth<-as.data.frame(temp.dd$dateofbirth)
+names(dateofbirth)<-"date_of_birth"
+summarytools::view(dfSummary(dateofbirth, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE , headings = FALSE), method = "render")
+rm(temp.dd)
+```
+## Louisiana
+```{r dateofbirth 5.Louisiana, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Louisiana.40"), ]
+dateofbirth<-as.data.frame(temp.dd$dateofbirth)
+names(dateofbirth)<-"date_of_birth"
+summarytools::view(dfSummary(dateofbirth, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE , headings = FALSE), method = "render")
+rm(temp.dd)
+```
+## Georgia
+```{r dateofbirth 6.Georgia, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Georgia.20"), ]
+dateofbirth<-as.data.frame(temp.dd$dateofbirth)
+names(dateofbirth)<-"date_of_birth"
+summarytools::view(dfSummary(dateofbirth, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE , headings = FALSE), method = "render")
+rm(temp.dd)
+```
+## Michigan
+```{r dateofbirth 7.Michigan, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Michigan.61"), ]
+dateofbirth<-as.data.frame(temp.dd$dateofbirth)
+names(dateofbirth)<-"date_of_birth"
+summarytools::view(dfSummary(dateofbirth, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+<br>
+
+# GRADE {.tabset}
+
+<br>
+
+- Code for the grade or degree of differentiation of the reportable tumor. For lymphomas and leukemias, field also is used to indicate T-, B-, Null-, or NK-cell origin.  
+
+- See the grade tables on page 67 of ICD-O-3.16 See also the most recent CoC STORE manual and SEER Program Code Manual, for site specific coding rules and conversions.
+   + Grade I                                                      
+   + Grade II                                                      
+   + Grade III                                                    
+   + Grade IV                                                     
+   + T-cell                                                        
+   + B-cell                                                        
+   + Null cell                                                    
+   + NK (natural killer) cell                                    
+   + Grade/differentiation unknown, not stated, or not applicable 
+
+
+- Comment: Use the most recent Hematopoietic and Lymphoid rules for assigning grades 5-8.
+
+- Reference page: http://datadictionary.naaccr.org/default.aspx?c=10&Version=18#440																													
+<br>
+
+## All data
+```{r grade, message=FALSE}
+  grade <- d[,"grade"]
+
+  grade[which(grade=="9")]<-"NA"
+  grade<-as.factor(grade)
+  
+
+  levels(grade) <- list(Grade_I.1="1",
+                        Grade_II.2="2",
+                        Grade_III.3="3",
+                        Grade_IV.4="4",
+                        T_cell.5="5",
+                        B_cell.6="6",
+                        Null_cell.7="7",
+                        NK_cell.8="8")
+  new.d <- data.frame(new.d, grade)
+  new.d <- apply_labels(new.d, grade = "Tumor Grade")
+  
+  #cro(new.d$grade)# this is pretty but doesn't show NAs
+  #summary(new.d$grade)
+temp.d <- data.frame (new.d.1, grade)
+summarytools::view(dfSummary(new.d$grade, style = 'grid', max.distinct.values = 10, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+```
+
+## LA County
+
+```{r grade 1.LA County, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Los Angeles County.80"), ]
+grade<-as.data.frame(temp.dd$grade)
+names(grade)<-"grade"
+summarytools::view(dfSummary(grade, style = 'grid', max.distinct.values = 100, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Northern CA
+
+```{r grade 2.Northern CA, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Northern CA.30"), ]
+grade<-as.data.frame(temp.dd$grade)
+names(grade)<-"grade"
+summarytools::view(dfSummary(grade, style = 'grid', max.distinct.values = 100, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Greater CA
+
+```{r grade 3.Greater CA, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Greater CA.10"), ]
+grade<-as.data.frame(temp.dd$grade)
+names(grade)<-"grade"
+summarytools::view(dfSummary(grade, style = 'grid', max.distinct.values = 100, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Detroit
+
+```{r grade 4.Detroit, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Detroit.60"), ]
+grade<-as.data.frame(temp.dd$grade)
+names(grade)<-"grade"
+summarytools::view(dfSummary(grade, style = 'grid', max.distinct.values = 100, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Louisiana
+
+```{r grade 5.Louisiana, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Louisiana.40"), ]
+grade<-as.data.frame(temp.dd$grade)
+names(grade)<-"grade"
+summarytools::view(dfSummary(grade, style = 'grid', max.distinct.values = 100, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Georgia
+
+```{r grade 6.Georgia, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Georgia.20"), ]
+grade<-as.data.frame(temp.dd$grade)
+names(grade)<-"grade"
+summarytools::view(dfSummary(grade, style = 'grid', max.distinct.values = 100, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Michigan
+
+```{r grade 7.Michigan, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Michigan.61"), ]
+grade<-as.data.frame(temp.dd$grade)
+names(grade)<-"grade"
+summarytools::view(dfSummary(grade, style = 'grid', max.distinct.values = 100, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+<br>
+
+
+# RX SUMM--SURG PRIM SITE {.tabset}
+- Description: Site-specific codes for the type of surgery to the primary site performed as part of the first course of treatment. This includes treatment given at all facilities as part of the first course of treatment.
+
+- Codes: (in addition to the site-specific codes; Refer to the most recent version of STORE and SEER Program Code manual for additional instructions.)
+   + 00	None
+   + 10-19	Site-specific code; tumor destruction
+   + 20-80	Site-specific codes; resection
+   + 90	Surgery, NOS
+   + 98	Site specific codes; special
+   + 99	Unknown
+   
+- Reference: http://datadictionary.naaccr.org/default.aspx?c=10&Version=18#1290
+
+<br>
+
+## All data
+```{r RX SUMM-SURG PRIM SITE, message=FALSE, results='asis'}
+st_css() #IMPORTANT!
+  # Put 10-19 into one catecory and 20-80 into one category
+  a<-as.numeric(d$rxsummsurgprimsite)
+  a[which(a>=10&a<=19)]<-10
+  a[which(a>=20&a<=80)]<-20
+# cleaning
+  a[which(a==99)]<-NA
+  
+  rxsummsurgprimsite <- as.factor(a)
+  levels(rxsummsurgprimsite) <- list(None.0="0",
+                                  Tumor_destruction.10="10",
+                                  Resection.20="20",
+                                  Surgery_NOS.90="90")
+    new.d <- data.frame(new.d, rxsummsurgprimsite)
+    new.d <- apply_labels(new.d, rxsummsurgprimsite = "Type of radiation therapy")
+    #summary(new.d$rxsummsurgprimsite)
+temp.d <- data.frame (new.d.1, rxsummsurgprimsite)
+summarytools::view(dfSummary(new.d$rxsummsurgprimsite, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+```
+## LA County
+```{r  RX SUMM-SURG PRIM SITE 1.LA County,echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Los Angeles County.80"), ]
+rxsummsurgprimsite<-as.data.frame(temp.dd$rxsummsurgprimsite)
+names(rxsummsurgprimsite)<-"rx_summ_surg_prim_site"
+summarytools::view(dfSummary(rxsummsurgprimsite, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE ), method = "render")
+rm(temp.dd)
+```
+## Northern CA
+```{r  RX SUMM-SURG PRIM SITE 2.Northern CA,echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Northern CA.30"), ]
+rxsummsurgprimsite<-as.data.frame(temp.dd$rxsummsurgprimsite)
+names(rxsummsurgprimsite)<-"rx_summ_surg_prim_site"
+summarytools::view(dfSummary(rxsummsurgprimsite, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE ), method = "render")
+rm(temp.dd)
+```
+## Greater CA
+```{r  RX SUMM-SURG PRIM SITE 3.Greater CA,echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Greater CA.10"), ]
+rxsummsurgprimsite<-as.data.frame(temp.dd$rxsummsurgprimsite)
+names(rxsummsurgprimsite)<-"rx_summ_surg_prim_site"
+summarytools::view(dfSummary(rxsummsurgprimsite, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE , headings = FALSE), method = "render")
+rm(temp.dd)
+```
+## Detroit
+```{r  RX SUMM-SURG PRIM SITE 4.Detroit,echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Detroit.60"), ]
+rxsummsurgprimsite<-as.data.frame(temp.dd$rxsummsurgprimsite)
+names(rxsummsurgprimsite)<-"rx_summ_surg_prim_site"
+summarytools::view(dfSummary(rxsummsurgprimsite, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE , headings = FALSE), method = "render")
+rm(temp.dd)
+```
+## Louisiana
+```{r  RX SUMM-SURG PRIM SITE 5.Louisiana,echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Louisiana.40"), ]
+rxsummsurgprimsite<-as.data.frame(temp.dd$rxsummsurgprimsite)
+names(rxsummsurgprimsite)<-"rx_summ_surg_prim_site"
+summarytools::view(dfSummary(rxsummsurgprimsite, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE ), method = "render")
+rm(temp.dd)
+```
+## Georgia
+```{r  RX SUMM-SURG PRIM SITE 6.Georgia,echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Georgia.20"), ]
+rxsummsurgprimsite<-as.data.frame(temp.dd$rxsummsurgprimsite)
+names(rxsummsurgprimsite)<-"rx_summ_surg_prim_site"
+summarytools::view(dfSummary(rxsummsurgprimsite, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE ), method = "render")
+rm(temp.dd)
+```
+## Michigan
+```{r  RX SUMM-SURG PRIM SITE 7.Michigan,echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Michigan.61"), ]
+rxsummsurgprimsite<-as.data.frame(temp.dd$rxsummsurgprimsite)
+names(rxsummsurgprimsite)<-"rx_summ_surg_prim_site"
+summarytools::view(dfSummary(rxsummsurgprimsite, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE ), method = "render")
+rm(temp.dd)
+```
+
+<br>
+
+# CS SITE-SPECIFIC FACTOR 7 {.tabset}
+- Description: Identifies additional information needed to generate stage, or prognostic factors that have an effect on stage or survival.
+- Rationale: Site-specific factors are used to record additional staging information needed by Collaborative Staging to derive TNM and/or SEER Summary Stage codes for particular site-histology schema.
+- Codes (The information recorded in CS Site-Specific Factor 7 differs for each anatomic site. See the most current version of the Collaborative Stage Data Collection System (http://cancerstaging.org),13 for rules and site-specific codes and coding structures.)
+
+- Reference: http://datadictionary.naaccr.org/default.aspx?c=10&Version=18#2861
+
+- Reference: http://web2.facs.org/cstage0205/prostate/Prostateschema.html
+
+<br>
+
+## All data
+```{r cssitespecificfactor7, message=FALSE, results='asis'}
+st_css() #IMPORTANT!
+  cssitespecificfactor7 <- trimws(d[,"cssitespecificfactor7"])
+  
+  
+  cssitespecificfactor7[which(cssitespecificfactor7=="099")]<-"NA"
+  cssitespecificfactor7[which(cssitespecificfactor7=="99")]<-"NA"
+  cssitespecificfactor7[which(cssitespecificfactor7=="998")]<-"NA"
+  cssitespecificfactor7[which(cssitespecificfactor7=="999")]<-"NA"
+  
+   for (i in 1:length(cssitespecificfactor7)){
+    if (!is.na(cssitespecificfactor7[i])){
+      if (nchar(cssitespecificfactor7[i])==3){
+        cssitespecificfactor7[i]<-substring(cssitespecificfactor7[i],2)
+      }
+    }
+  }
+  cssitespecificfactor7<-as.factor(cssitespecificfactor7)
+  
+  new.d <- data.frame(new.d, cssitespecificfactor7)
+  new.d <- apply_labels(new.d, cssitespecificfactor7 = "cs_site_specific_factor7")
+temp.d <- data.frame (new.d.1, cssitespecificfactor7)
+summarytools::view(dfSummary(new.d$cssitespecificfactor7, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE ), method = "render")
+```
+## LA County
+```{r cssitespecificfactor7 1.LA County,echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Los Angeles County.80"), ]
+cssitespecificfactor7<-as.data.frame(temp.dd$cssitespecificfactor7)
+names(cssitespecificfactor7)<-"cs_site_specific_factor7"
+summarytools::view(dfSummary(cssitespecificfactor7, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+rm(temp.dd)
+```
+## Northern CA
+```{r cssitespecificfactor7 2.Northern CA,echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Northern CA.30"), ]
+cssitespecificfactor7<-as.data.frame(temp.dd$cssitespecificfactor7)
+names(cssitespecificfactor7)<-"cs_site_specific_factor7"
+summarytools::view(dfSummary(cssitespecificfactor7, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE , headings = FALSE), method = "render")
+rm(temp.dd)
+```
+## Greater CA
+```{r cssitespecificfactor7 3.Greater CA,echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Greater CA.10"), ]
+cssitespecificfactor7<-as.data.frame(temp.dd$cssitespecificfactor7)
+names(cssitespecificfactor7)<-"cs_site_specific_factor7"
+summarytools::view(dfSummary(cssitespecificfactor7, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE ), method = "render")
+rm(temp.dd)
+```
+## Detroit
+```{r cssitespecificfactor7 4.Detroit,echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Detroit.60"), ]
+cssitespecificfactor7<-as.data.frame(temp.dd$cssitespecificfactor7)
+names(cssitespecificfactor7)<-"cs_site_specific_factor7"
+summarytools::view(dfSummary(cssitespecificfactor7, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+rm(temp.dd)
+```
+## Louisiana
+```{r cssitespecificfactor7 5.Louisiana,echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Louisiana.40"), ]
+cssitespecificfactor7<-as.data.frame(temp.dd$cssitespecificfactor7)
+names(cssitespecificfactor7)<-"cs_site_specific_factor7"
+summarytools::view(dfSummary(cssitespecificfactor7, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE , headings = FALSE), method = "render")
+rm(temp.dd)
+```
+## Georgia
+```{r cssitespecificfactor7 6.Georgia,echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Georgia.20"), ]
+cssitespecificfactor7<-as.data.frame(temp.dd$cssitespecificfactor7)
+names(cssitespecificfactor7)<-"cs_site_specific_factor7"
+summarytools::view(dfSummary(cssitespecificfactor7, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE ), method = "render")
+rm(temp.dd)
+```
+## Michigan
+```{r cssitespecificfactor7 7.Michigan,echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Michigan.61"), ]
+cssitespecificfactor7<-as.data.frame(temp.dd$cssitespecificfactor7)
+names(cssitespecificfactor7)<-"cs_site_specific_factor7"
+summarytools::view(dfSummary(cssitespecificfactor7, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE ), method = "render")
+rm(temp.dd)
+```
+
+<br>
+
+
+# CS SITE-SPECIFIC FACTOR 8 {.tabset}
+- Description: Identifies additional information needed to generate stage, or prognostic factors that have an effect on stage or survival.
+- Rationale: Site-specific factors are used to record additional staging information needed by Collaborative Staging to derive TNM and/or SEER Summary Stage codes for particular site-histology schema.
+- Codes (The information recorded in CS Site-Specific Factor 8 differs for each anatomic site. See the most current version of the Collaborative Stage Data Collection System (http://cancerstaging.org),13 for rules and site-specific codes and coding structures.)
+
+- Reference: http://datadictionary.naaccr.org/default.aspx?c=10&Version=18#2862
+
+- Reference: http://web2.facs.org/cstage0205/prostate/Prostateschema.html
+
+<br>
+
+## All data
+```{r cssitespecificfactor8, message=FALSE, results='asis'}
+st_css() #IMPORTANT!
+  #cssitespecificfactor8 <- as.factor(trimws(d[,"cssitespecificfactor8"]))
+  cssitespecificfactor8 <- trimws(d[,"cssitespecificfactor8"])
+  cssitespecificfactor8[which(cssitespecificfactor8=="010")]<-"10"
+  cssitespecificfactor8[which(cssitespecificfactor8=="998")]<-"NA"
+  cssitespecificfactor8[which(cssitespecificfactor8=="999")]<-"10"
+
+  for (i in 1:length(cssitespecificfactor8)){
+    if (!is.na(cssitespecificfactor8[i])){
+      if (nchar(cssitespecificfactor8[i])==3){
+        cssitespecificfactor8[i]<-substring(cssitespecificfactor8[i],3)
+      }
+    }
+  }
+  
+  cssitespecificfactor8<-as.factor(cssitespecificfactor8)
+  cssitespecificfactor8 <- ordered(cssitespecificfactor8, c("4","5","6","7","8","9","10"))
+  
+  new.d <- data.frame(new.d, cssitespecificfactor8)
+  new.d <- apply_labels(new.d, cssitespecificfactor8 = "cs_site_specific_factor8")
+temp.d <- data.frame (new.d.1, cssitespecificfactor8)
+summarytools::view(dfSummary(new.d$cssitespecificfactor8, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE ), method = "render")
+```
+## LA County
+```{r cssitespecificfactor8 1.LA County,echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Los Angeles County.80"), ]
+cssitespecificfactor8<-as.data.frame(temp.dd$cssitespecificfactor8)
+names(cssitespecificfactor8)<-"cs_site_specific_factor8"
+summarytools::view(dfSummary(cssitespecificfactor8, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+rm(temp.dd)
+```
+## Northern CA
+```{r cssitespecificfactor8 2.Northern CA,echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Northern CA.30"), ]
+cssitespecificfactor8<-as.data.frame(temp.dd$cssitespecificfactor8)
+names(cssitespecificfactor8)<-"cs_site_specific_factor8"
+summarytools::view(dfSummary(cssitespecificfactor8, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE , headings = FALSE), method = "render")
+rm(temp.dd)
+```
+## Greater CA
+```{r cssitespecificfactor8 3.Greater CA,echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Greater CA.10"), ]
+cssitespecificfactor8<-as.data.frame(temp.dd$cssitespecificfactor8)
+names(cssitespecificfactor8)<-"cs_site_specific_factor8"
+summarytools::view(dfSummary(cssitespecificfactor8, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE ), method = "render")
+rm(temp.dd)
+```
+## Detroit
+```{r cssitespecificfactor8 4.Detroit,echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Detroit.60"), ]
+cssitespecificfactor8<-as.data.frame(temp.dd$cssitespecificfactor8)
+names(cssitespecificfactor8)<-"cs_site_specific_factor8"
+summarytools::view(dfSummary(cssitespecificfactor8, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+rm(temp.dd)
+```
+## Louisiana
+```{r cssitespecificfactor8 5.Louisiana,echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Louisiana.40"), ]
+cssitespecificfactor8<-as.data.frame(temp.dd$cssitespecificfactor8)
+names(cssitespecificfactor8)<-"cs_site_specific_factor8"
+summarytools::view(dfSummary(cssitespecificfactor8, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE , headings = FALSE), method = "render")
+rm(temp.dd)
+```
+## Georgia
+```{r cssitespecificfactor8 6.Georgia,echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Georgia.20"), ]
+cssitespecificfactor8<-as.data.frame(temp.dd$cssitespecificfactor8)
+names(cssitespecificfactor8)<-"cs_site_specific_factor8"
+summarytools::view(dfSummary(cssitespecificfactor8, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE ), method = "render")
+rm(temp.dd)
+```
+## Michigan
+```{r cssitespecificfactor8 7.Michigan,echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Michigan.61"), ]
+cssitespecificfactor8<-as.data.frame(temp.dd$cssitespecificfactor8)
+names(cssitespecificfactor8)<-"cs_site_specific_factor8"
+summarytools::view(dfSummary(cssitespecificfactor8, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE ), method = "render")
+rm(temp.dd)
+```
+
+<br>
+
+# CS SITE-SPECIFIC FACTOR 1 - PSA {.tabset}
+- Description: Identifies additional information needed to generate stage, or prognostic factors that have an effect on stage or survival.
+- Rationale: Site-specific factors are used to record additional staging information needed by Collaborative Staging to derive TNM and/or SEER Summary Stage codes for particular site-histology schema.
+- Codes (The information recorded in CS Site-Specific Factor 1 differs for each anatomic site. See the most current version of the Collaborative Stage Data Collection System (http://cancerstaging.org),13 for rules and site-specific codes and coding structures.)
+
+- Reference: http://datadictionary.naaccr.org/default.aspx?c=10&Version=18#2880
+
+- Reference: http://web2.facs.org/cstage0205/prostate/Prostateschema.html
+
+<br>
+
+## All data
+```{r cssitespecificfactor1, message=FALSE, results='asis',warning=FALSE}
+st_css() #IMPORTANT!
+  cssitespecificfactor1 <- trimws(d[,"cssitespecificfactor1"])
+  
+  cssitespecificfactor1[which(cssitespecificfactor1=="997")]<-"NA"
+  cssitespecificfactor1[which(cssitespecificfactor1=="998")]<-"NA"
+  cssitespecificfactor1[which(cssitespecificfactor1=="999")]<-"NA"
+  
+  cssitespecificfactor1<-as.numeric(cssitespecificfactor1)
+  cssitespecificfactor1 <- cssitespecificfactor1/10
+ 
+  new.d <- data.frame(new.d, cssitespecificfactor1)
+  new.d <- apply_labels(new.d, cssitespecificfactor1 = "cs_site_specific_factor1")
+temp.d <- data.frame (new.d.1, cssitespecificfactor1)
+summarytools::view(dfSummary(new.d$cssitespecificfactor1, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE ), method = "render")
+```
+## LA County
+```{r cssitespecificfactor1 1.LA County,echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Los Angeles County.80"), ]
+cssitespecificfactor1<-as.data.frame(temp.dd$cssitespecificfactor1)
+names(cssitespecificfactor1)<-"cs_site_specific_factor1"
+summarytools::view(dfSummary(cssitespecificfactor1, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+rm(temp.dd)
+```
+## Northern CA
+```{r cssitespecificfactor1 2.Northern CA,echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Northern CA.30"), ]
+cssitespecificfactor1<-as.data.frame(temp.dd$cssitespecificfactor1)
+names(cssitespecificfactor1)<-"cs_site_specific_factor1"
+summarytools::view(dfSummary(cssitespecificfactor1, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE , headings = FALSE), method = "render")
+rm(temp.dd)
+```
+## Greater CA
+```{r cssitespecificfactor1 3.Greater CA,echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Greater CA.10"), ]
+cssitespecificfactor1<-as.data.frame(temp.dd$cssitespecificfactor1)
+names(cssitespecificfactor1)<-"cs_site_specific_factor1"
+summarytools::view(dfSummary(cssitespecificfactor1, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE ), method = "render")
+rm(temp.dd)
+```
+## Detroit
+```{r cssitespecificfactor1 4.Detroit,echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Detroit.60"), ]
+cssitespecificfactor1<-as.data.frame(temp.dd$cssitespecificfactor1)
+names(cssitespecificfactor1)<-"cs_site_specific_factor1"
+summarytools::view(dfSummary(cssitespecificfactor1, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+rm(temp.dd)
+```
+## Louisiana
+```{r cssitespecificfactor1 5.Louisiana,echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Louisiana.40"), ]
+cssitespecificfactor1<-as.data.frame(temp.dd$cssitespecificfactor1)
+names(cssitespecificfactor1)<-"cs_site_specific_factor1"
+summarytools::view(dfSummary(cssitespecificfactor1, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE , headings = FALSE), method = "render")
+rm(temp.dd)
+```
+## Georgia
+```{r cssitespecificfactor1 6.Georgia,echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Georgia.20"), ]
+cssitespecificfactor1<-as.data.frame(temp.dd$cssitespecificfactor1)
+names(cssitespecificfactor1)<-"cs_site_specific_factor1"
+summarytools::view(dfSummary(cssitespecificfactor1, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE ), method = "render")
+rm(temp.dd)
+```
+## Michigan
+```{r cssitespecificfactor1 7.Michigan,echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Michigan.61"), ]
+cssitespecificfactor1<-as.data.frame(temp.dd$cssitespecificfactor1)
+names(cssitespecificfactor1)<-"cs_site_specific_factor1"
+summarytools::view(dfSummary(cssitespecificfactor1, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE ), method = "render")
+rm(temp.dd)
+```
+
+<br>
+
+# DERIVED AJCC-7 T {.tabset}
+- Description: This item is the derived AJCC “T” staging element from coded fields using the CS algorithm. Effective for cases diagnosed 2010+.
+
+- Rationale: Derived AJCC-7 T can be used to evaluate disease spread at diagnosis, plan and track treatment patterns, and analyze outcomes.
+
+- Codes (See the most current version of the Collaborative Stage Data Collection System (https://cancerstaging.org/cstage/Pages/default.aspx),13 for rules and site-specific codes and coding structures.)
+   
+- Reference: http://datadictionary.naaccr.org/default.aspx?c=10&Version=18#3400
+
+<br>
+
+## All data
+```{r derivedajcc7t, message=FALSE, results='asis'}
+st_css() #IMPORTANT!
+  derivedajcc7t <-d[,"derivedajcc7t"]
+  derivedajcc7t[which(derivedajcc7t=="999")]<-"NA"
+  derivedajcc7t<-as.factor(derivedajcc7t)
+  
+    new.d <- data.frame(new.d, derivedajcc7t)
+    new.d <- apply_labels(new.d, derivedajcc7t = "derived_ajcc_7t")
+    #summary(new.d$derivedajcc7t)
+temp.d <- data.frame (new.d.1, derivedajcc7t)
+summarytools::view(dfSummary(new.d$derivedajcc7t, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE ), method = "render")
+```
+## LA County
+```{r derivedajcc7t 1.LA County, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Los Angeles County.80"), ]
+derivedajcc7t<-as.data.frame(temp.dd$derivedajcc7t)
+names(derivedajcc7t)<-"derived_ajcc_7t"
+summarytools::view(dfSummary(derivedajcc7t, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE , headings = FALSE), method = "render")
+rm(temp.dd)
+```
+## Northern CA
+```{r derivedajcc7t 2.Northern CA, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Northern CA.30"), ]
+derivedajcc7t<-as.data.frame(temp.dd$derivedajcc7t)
+names(derivedajcc7t)<-"derived_ajcc_7t"
+summarytools::view(dfSummary(derivedajcc7t, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE , headings = FALSE), method = "render")
+rm(temp.dd)
+```
+## Greater CA
+```{r derivedajcc7t 3.Greater CA, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Greater CA.10"), ]
+derivedajcc7t<-as.data.frame(temp.dd$derivedajcc7t)
+names(derivedajcc7t)<-"derived_ajcc_7t"
+summarytools::view(dfSummary(derivedajcc7t, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE , headings = FALSE), method = "render")
+rm(temp.dd)
+```
+## Detroit
+```{r derivedajcc7t 4.Detroit, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Detroit.60"), ]
+derivedajcc7t<-as.data.frame(temp.dd$derivedajcc7t)
+names(derivedajcc7t)<-"derived_ajcc_7t"
+summarytools::view(dfSummary(derivedajcc7t, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE , headings = FALSE), method = "render")
+rm(temp.dd)
+```
+## Louisiana
+```{r derivedajcc7t 5.Louisiana, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Louisiana.40"), ]
+derivedajcc7t<-as.data.frame(temp.dd$derivedajcc7t)
+names(derivedajcc7t)<-"derived_ajcc_7t"
+summarytools::view(dfSummary(derivedajcc7t, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE , headings = FALSE), method = "render")
+rm(temp.dd)
+```
+## Georgia
+```{r derivedajcc7t 6.Georgia, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Georgia.20"), ]
+derivedajcc7t<-as.data.frame(temp.dd$derivedajcc7t)
+names(derivedajcc7t)<-"derived_ajcc_7t"
+summarytools::view(dfSummary(derivedajcc7t, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE , headings = FALSE), method = "render")
+rm(temp.dd)
+```
+## Michigan
+```{r derivedajcc7t 7.Michigan, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Michigan.61"), ]
+derivedajcc7t<-as.data.frame(temp.dd$derivedajcc7t)
+names(derivedajcc7t)<-"derived_ajcc_7t"
+summarytools::view(dfSummary(derivedajcc7t, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+<br>
+
+
+
+```{r }
+write.table(new.d, file="output_JHU_0624.txt", sep="\t")
+```
+
+
+
+

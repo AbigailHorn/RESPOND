@@ -1,0 +1,622 @@
+---
+title: "RESPOND Data Investigation"
+author: "David Conti and Rich Pinder"
+date: "`r Sys.time()`"
+output:
+  html_document:
+    df_print: paged
+    code_folding: hide
+  pdf_document: default
+---
+
+```{r setup, include=FALSE, echo=FALSE}
+require("RPostgreSQL") # for PostgreSQL
+library(zoo) # for date conversion
+library(expss) # for labels
+library(DBI) # for Database connectivity
+library(summarytools) # for summarizing variables
+library(tidyverse)
+library(plyr)
+library(knitr) # for creating tables
+# set working directory
+setwd("~/Google Drive File Stream/My Drive/Projects/RESPOND/CORE D/InitalDataCleaning")
+
+```
+
+```{r input registry data, echo=FALSE}
+load("VRegAll20210116.Rda")
+d <- VRegAll
+#print(names(d))
+```
+
+```{r first look - registry data - 30 vars, echo=FALSE}
+varName.list <- names(d)
+varName.list <- c("registryid",
+                  "birthplace","birthplacestate","birthplacecountry",
+                  "dateofdiagnosis",
+                  "primarysite", "grade",
+                  "typeofreportingsource","primarypayeratdx",
+                  "derivedsummarystage2018","derivedeod2018stagegroup",
+                  "rxsummtreatmentstatus","rxsummsurgprimsite","rxsummradiation","rxsummchemo","rxsummhormone",
+                  "vitalstatus",
+                  "derivedss2000","derivedajcc7stagegrp","derivedseercmbstggrp",
+                  "gleasonpatternsclinical","gleasonpatternspathological","gleasonscoreclinical","gleasonscorepathological","gleasontertiarypattern",
+                  "gradeclinical","gradepathological",
+                  "numberofcoresexamined","numberofcorespositive",
+                  "prostatepathologicalextension",
+                  "psalabvalue")
+d <- d[,varName.list]
+print(names(d))
+print(dim(d))
+
+new.d <- data.frame(matrix(ncol=0, nrow=nrow(d)))
+new.d.n <- data.frame(matrix(ncol=0, nrow=nrow(d)))
+new.d.1 <- data.frame(matrix(ncol=0, nrow=nrow(d)))
+
+```
+
+# REGISTRY ID	
+http://datadictionary.naaccr.org/default.aspx?c=10&Version=18#40  
+A unique code that represents the data transmission source. This item should be used for central registries and non-US health care providers. Refer to Registry ID table in Appendix B.
+
+```{r registryid }
+
+if("registryid" %in% varName.list) { 
+  registryid <- as.factor(trimws(d[,"registryid"]))
+  #new.d.n <- data.frame(new.d.n, registryid) # keep NAACCR coding
+  
+  # NEED REGISTRY NAMES!!
+ 
+  
+  #replace number with names
+  
+  levels(registryid)[levels(registryid)=="1501"] <- "SEER San Francisco-Oakland SMSA"
+  levels(registryid)[levels(registryid)=="1527"] <- "SEER Metropolitan Atlanta"
+  levels(registryid)[levels(registryid)=="1535"] <- "SEER Los Angeles"
+  levels(registryid)[levels(registryid)=="1537"] <- "SEER Rural Georgia"
+  levels(registryid)[levels(registryid)=="1541"] <- "SEER California except LA, SF-Oak, and San-Jose/Monterey"
+  levels(registryid)[levels(registryid)=="1547"] <- "SEER Greater Georgia"
+  levels(registryid)[levels(registryid)=="60"] <- "Registry7"
+  levels(registryid)[levels(registryid)=="7300"] <- "Louisiana Tumor Registry"
+  
+  
+  new.d <- data.frame(new.d, registryid)
+  new.d <- apply_labels(new.d, registryid = "Registry ID")
+  new.d.1 <- data.frame(new.d.1, registryid)
+  
+  #cro(new.d$registryid) # this is pretty but doesn't show NAs
+  #summary(new.d$registryid)
+  
+  #Using kable function to form a nice table
+  
+  registryid_count<-count(new.d$registryid)
+  colnames(registryid_count)<- c("Registry", "Total")
+  kable(registryid_count, format = "html", align = 'c')
+  }
+
+```
+
+# BIRTHPLACE
+http://datadictionary.naaccr.org/default.aspx?c=10&Version=18#250  
+Description
+Code for place of birth of the patient. If a patient has multiple tumors, all records should contain the same code.  
+Rationale  
+Place of Birth is helpful for patient matching and can be used when reviewing race and ethnicity. In addition, adding birthplace data to race and ethnicity allows for a more specific definition of the population being reported. Careful descriptions of ancestry, birthplace, and immigration history of populations studied are needed to make the basis for classification into ethnic groups clear. Birthplace has been associated with variation in genetic, socioeconomic, cultural, and nutritional characteristics that affect patterns of disease. A better understanding of the differences within racial and ethnic categories also can help states develop effective, culturally sensitive public health prevention programs to decrease the prevalence of high-risk behaviors and increase the use of preventive services.  
+Note: For cases diagnosed January 1, 2013, and later, Birthplace--State [252] and Birthplace--Country [254] replace Birthplace [250].  
+Codes  
+See Appendix B  for numeric and alphabetic lists of places and codes (also see Appendix B of the SEER Program Code Manual at seer.cancer.gov/tools/codingmanuals/index.html).
+```{r birthplace }
+
+if("birthplace" %in% varName.list) { 
+  birthplace <- as.factor(trimws(d[,"birthplace"]))
+  # recode for interpretable birthplace
+  #new.d.n <- data.frame(new.d.n, birthplace) # keep NAACCR coding
+  levels(birthplace)[levels(birthplace)=="999"] <- "Unkown"
+  levels(birthplace)[levels(birthplace)=="97"] <- "Sonoma (Greater California)"
+
+
+  new.d <- data.frame(new.d, birthplace)
+  new.d <- apply_labels(new.d, birthplace = "Place of birth")
+  
+  cro(new.d$birthplace)
+  #cro(new.d$registryid, new.d$birthplace)
+  
+  }
+
+```
+
+# BIRTHPLACE--STATE
+USPS abbreviation for the state, commonwealth, U.S. possession; or CanadaPost abbreviation for the Canadian province/territory in which the patient was born. If the patient has multiple primaries, the state of birth is the same for each tumor. This data item became part of the NAACCR transmission record effective with Volume II, Version 13 in order to include country and state for each geographic item and to use interoperable codes. It supplements the item BIRTHPLACE--COUNTRY [254]. These two data items are intended to replace the item BIRTHPLACE [250].  
+Rationale  
+This is a modification of the current item Birthplace [250] item in order to make use of standard codes, rather than using geographic codes that are only used by cancer registries. The intention is that item 250 be converted to populate the new corresponding, more standard, data items.
+Codes  
+See Appendix B for numeric and alphabetic lists of places and codes (also see Appendix B of the SEER Program Code Manual at seer.cancer.gov/tools/codingmanuals/index.html).
+```{r birthplace state }
+
+if("birthplacestate" %in% varName.list) {
+  birthplacestate <- as.factor(trimws(d[,"birthplacestate"]))
+  # recode for interpretable birthplace state
+  #new.d.n <- data.frame(new.d.n, birthplacestate) # keep NAACCR coding
+  
+  levels(birthplacestate)[levels(birthplacestate)=="AK"] <- "Alaska"
+  levels(birthplacestate)[levels(birthplacestate)=="AL"] <- "Alabama"
+  levels(birthplacestate)[levels(birthplacestate)=="AR"] <- "Arkansas"
+  levels(birthplacestate)[levels(birthplacestate)=="AZ"] <- "Arizona"
+  levels(birthplacestate)[levels(birthplacestate)=="CA"] <- "California"
+  levels(birthplacestate)[levels(birthplacestate)=="CD"] <- "Canada"
+  levels(birthplacestate)[levels(birthplacestate)=="CO"] <- "Colorado"
+  levels(birthplacestate)[levels(birthplacestate)=="CT"] <- "Connecticut"
+  levels(birthplacestate)[levels(birthplacestate)=="DC"] <- "District of Columbia"
+  levels(birthplacestate)[levels(birthplacestate)=="DE"] <- "Delaware"
+  levels(birthplacestate)[levels(birthplacestate)=="FL"] <- "Florida"
+  levels(birthplacestate)[levels(birthplacestate)=="GA"] <- "Georgia"
+  levels(birthplacestate)[levels(birthplacestate)=="GU"] <- "Guam"
+  levels(birthplacestate)[levels(birthplacestate)=="HI"] <- "Hawaii"
+  levels(birthplacestate)[levels(birthplacestate)=="IA"] <- "Iowa"
+  levels(birthplacestate)[levels(birthplacestate)=="IL"] <- "Illinois"
+  levels(birthplacestate)[levels(birthplacestate)=="IN"] <- "Indiana"
+  levels(birthplacestate)[levels(birthplacestate)=="KS"] <- "Kansas"
+  levels(birthplacestate)[levels(birthplacestate)=="KY"] <- "Kentucky"
+  levels(birthplacestate)[levels(birthplacestate)=="LA"] <- "Louisiana"
+  levels(birthplacestate)[levels(birthplacestate)=="MA"] <- "Massachusetts"
+  levels(birthplacestate)[levels(birthplacestate)=="MD"] <- "Maryland"
+  levels(birthplacestate)[levels(birthplacestate)=="ME"] <- "Maine"
+  levels(birthplacestate)[levels(birthplacestate)=="MI"] <- "Michigan"
+  levels(birthplacestate)[levels(birthplacestate)=="MN"] <- "Minnesota"
+  levels(birthplacestate)[levels(birthplacestate)=="MO"] <- "Missouri"
+  levels(birthplacestate)[levels(birthplacestate)=="MS"] <- "Mississippi"
+  levels(birthplacestate)[levels(birthplacestate)=="MT"] <- "Montana"
+  levels(birthplacestate)[levels(birthplacestate)=="NC"] <- "North Carolina"
+  levels(birthplacestate)[levels(birthplacestate)=="NE"] <- "Nebraska"
+  levels(birthplacestate)[levels(birthplacestate)=="NJ"] <- "New Jersey"
+  levels(birthplacestate)[levels(birthplacestate)=="NM"] <- "New Mexico"
+  levels(birthplacestate)[levels(birthplacestate)=="NY"] <- "New York"
+  levels(birthplacestate)[levels(birthplacestate)=="OH"] <- "Ohio"
+  levels(birthplacestate)[levels(birthplacestate)=="OK"] <- "Oklahoma"
+  levels(birthplacestate)[levels(birthplacestate)=="OR"] <- "Oregon"
+  levels(birthplacestate)[levels(birthplacestate)=="PA"] <- "Pennsylvania"
+  levels(birthplacestate)[levels(birthplacestate)=="PR"] <- "Puerto Rico"
+  levels(birthplacestate)[levels(birthplacestate)=="SC"] <- "South Carolina"
+  levels(birthplacestate)[levels(birthplacestate)=="SD"] <- "South Dakota"
+  levels(birthplacestate)[levels(birthplacestate)=="TN"] <- "Tennessee"
+  levels(birthplacestate)[levels(birthplacestate)=="TX"] <- "Texas"
+  levels(birthplacestate)[levels(birthplacestate)=="US"] <- "United States of America (the)"
+  levels(birthplacestate)[levels(birthplacestate)=="UT"] <- "Utah"
+  levels(birthplacestate)[levels(birthplacestate)=="VA"] <- "Virginia"
+  levels(birthplacestate)[levels(birthplacestate)=="VI"] <- "Virgin Islands (U.S.)"
+  levels(birthplacestate)[levels(birthplacestate)=="VT"] <- "Vermont"
+  levels(birthplacestate)[levels(birthplacestate)=="WA"] <- "Washington"
+  levels(birthplacestate)[levels(birthplacestate)=="WI"] <- "Wisconsin"
+  levels(birthplacestate)[levels(birthplacestate)=="WV"] <- "West Virginia"
+  #levels(birthplacestate)[levels(birthplacestate)=="XX"] <- ""
+  #levels(birthplacestate)[levels(birthplacestate)=="YY"] <- ""
+  levels(birthplacestate)[levels(birthplacestate)=="ZZ"] <- "Unknown"
+
+  new.d <- data.frame(new.d, birthplacestate)
+  new.d <- apply_labels(new.d, birthplacestate = "State of birth")
+  
+  #summarytools::view(dfSummary(temp.d, style = 'grid', max.distinct.values = 100), method = 'render', report.title = 'All Data')
+  #lapply(unique(temp.d$registryid), FUN = function(loc){
+   # summarytools::view(dfSummary(temp.d[new.d$registryid == loc, ], style = 'grid', max.distinct.values = 100),
+                       #method = 'render', report.title = as.character(loc))
+  #})
+  
+  
+  
+  cro(new.d$birthplacestate)
+  #cro(new.d$registryid, new.d$birthplacestate)
+  
+  }
+
+```
+
+```{r birthplacestate smry}
+
+#Works well in RStudio, but not in HTML file
+temp.d <- data.frame (new.d.1, birthplacestate)
+summarytools::view(dfSummary(temp.d$birthplacestate, style = 'grid', max.distinct.values = 100, tmp.img.dir = "/tmp", report.title = 'All Data'))
+lapply(unique(new.d$registryid), FUN = function(loc){
+   summarytools::view(dfSummary(temp.d[new.d$registryid == loc, ], style = 'grid', max.distinct.values = 100, tmp.img.dir = "/tmp"),
+                       method = 'render', report.title = as.character(loc))
+})
+rm(temp.d)
+```
+
+
+
+
+# BIRTHPLACE--COUNTRY
+Code for the country in which the patient was born. If the patient has multiple tumors, all records should contain the same code. This data item became part of the NAACCR transmission record effective with Volume II, Version 13 in order to include country and state for each geographic item and to use interoperable codes. It supplements the item BIRTHPLACE--STATE [252]. These two data items are intended to replace the use of BIRTHPLACE [250].  
+Rationale  
+Place of Birth is helpful for patient matching and can be used when reviewing race and ethnicity. It is an important item in algorithms for imputing race and ethnicity. In addition, adding birthplace data to race and ethnicity allows for a more specific definition of the population being reported. Careful descriptions of ancestry, birthplace, and immigration history of populations studied are needed to make the basis for classification into ethnic groups clear. Birthplace has been associated with variation in genetic, socioeconomic, cultural, and nutritional characteristics that affect patterns of disease. A better understanding of the differences within racial and ethnic categories also can help states develop effective, culturally-sensitive public health prevention programs to decrease the prevalence of high-risk behaviors and increase the use of preventive services.  
+Codes  
+Custom codes for historic use only  
+ZZN	North America NOS
+ZZC	Central American NOS
+ZZS	South America NOS
+ZZP	Pacific NOS
+ZZE	Europe NOS
+ZZF	Africa NOS
+ZZA	Asia NOS
+ZZX	Non-US NOS
+ZZU	Unknown
+Custom codes for historic use only
+XNI	North American Islands
+XCB	Other Caribbean Islands
+XEN	England, Channel Islands, Isle of Man
+XSC	Scandinavia
+XGR	Germanic Countries
+XSL	Slavic Countries
+CSK	Czechoslovakia (former)
+YUG	Yugoslavia (former)
+XUM	Ukraine and Moldova
+XNF	North Africa
+XSD	Sudanese Countries
+XWF	West Africa
+XSF	South Africa
+XEF	East Africa
+XIF	African Islands
+XET	Ethiopia and Eritrea
+XAP	Arabian Peninsula
+XIS	Israel and Palestine
+XCR	Caucasian Republics of former USSR
+XOR	Other Asian Republics of former USSR
+XSE	Southeast Asia
+XMS	Malaysia, Singapore, Brunei
+XCH	China, NOS
+XML	Melanesian Islands
+XMC	Micronesian Islands
+XPL	Polynesian Islands  
+See Appendix B for numeric and alphabetic lists of places and codes (also see Appendix B of the SEER Program Code Manual at seer.cancer.gov/tools/codingmanuals/index.html).
+```{r birthplace country }
+
+if("birthplacecountry" %in% varName.list) {
+  birthplacecountry <- as.factor(trimws(d[,"birthplacecountry"]))
+  #new.d.n <- data.frame(new.d.n, birthplacecountry) # keep NAACCR coding
+  # recode for interpretable birthplace country
+  levels(birthplacecountry)[levels(birthplacecountry)=="ZZU"] <- "Unkown"
+  levels(birthplacecountry)[levels(birthplacecountry)=="ZZF"] <- "Africa"
+  levels(birthplacecountry)[levels(birthplacecountry)=="ZZX"] <- "Non_US"
+  levels(birthplacecountry)[levels(birthplacecountry)=="ZZE"] <- "Europe NOS"
+  levels(birthplacecountry)[levels(birthplacecountry)=="ZZC"] <- "Central American NOS"
+  levels(birthplacecountry)[levels(birthplacecountry)=="ZWE"] <- "Zimbabwe"
+  levels(birthplacecountry)[levels(birthplacecountry)=="XWF"] <- "West Africa, NOS (French Africa, NOS)"
+  levels(birthplacecountry)[levels(birthplacecountry)=="WSM"] <- "Samoa"
+  levels(birthplacecountry)[levels(birthplacecountry)=="VIR"] <- "Virgin Islands (U.S.)"
+  levels(birthplacecountry)[levels(birthplacecountry)=="USA"] <- "United States of America (the)"
+  levels(birthplacecountry)[levels(birthplacecountry)=="UGA"] <- "Uganda"
+  levels(birthplacecountry)[levels(birthplacecountry)=="TTO"] <- "Trinidad and Tobago"
+  levels(birthplacecountry)[levels(birthplacecountry)=="SOM"] <- "Somalia"
+  levels(birthplacecountry)[levels(birthplacecountry)=="SLE"] <- "Sierra Leone"
+  levels(birthplacecountry)[levels(birthplacecountry)=="SEN"] <- "Senegal"
+  levels(birthplacecountry)[levels(birthplacecountry)=="RWA"] <- "Rwanda"
+  levels(birthplacecountry)[levels(birthplacecountry)=="PRT"] <- "Portugal"
+  levels(birthplacecountry)[levels(birthplacecountry)=="PRI"] <- "Puerto Rico"
+  levels(birthplacecountry)[levels(birthplacecountry)=="PAN"] <- "Panama"
+  levels(birthplacecountry)[levels(birthplacecountry)=="NIC"] <- "Nicaragua"
+  levels(birthplacecountry)[levels(birthplacecountry)=="NGA"] <- "Nigeria"
+  levels(birthplacecountry)[levels(birthplacecountry)=="NER"] <- "Niger"
+  levels(birthplacecountry)[levels(birthplacecountry)=="MEX"] <- "Mexico"
+  levels(birthplacecountry)[levels(birthplacecountry)=="LCA"] <- "Saint Lucia"
+  levels(birthplacecountry)[levels(birthplacecountry)=="LBR"] <- "Liberia"
+  levels(birthplacecountry)[levels(birthplacecountry)=="JPN"] <- "Japan"
+  levels(birthplacecountry)[levels(birthplacecountry)=="JAM"] <- "Jamaica"
+  levels(birthplacecountry)[levels(birthplacecountry)=="HUN"] <- "Hungary"
+  levels(birthplacecountry)[levels(birthplacecountry)=="HTI"] <- "Haiti"
+  levels(birthplacecountry)[levels(birthplacecountry)=="GUY"] <- "Guyana"
+  levels(birthplacecountry)[levels(birthplacecountry)=="GUM"] <- "Guam"
+  levels(birthplacecountry)[levels(birthplacecountry)=="GRD"] <- "Grenada"
+  levels(birthplacecountry)[levels(birthplacecountry)=="GMB"] <- "Gambia (the)"
+  levels(birthplacecountry)[levels(birthplacecountry)=="GHA"] <- "Ghana"
+  levels(birthplacecountry)[levels(birthplacecountry)=="GEO"] <- "Georgia"
+  levels(birthplacecountry)[levels(birthplacecountry)=="GBR"] <- "United Kingdom of Great Britain and Northern Ireland (the)"
+  levels(birthplacecountry)[levels(birthplacecountry)=="FRA"] <- "France"
+  levels(birthplacecountry)[levels(birthplacecountry)=="ETH"] <- "Ethiopia"
+  levels(birthplacecountry)[levels(birthplacecountry)=="ERI"] <- "Eritrea"
+  levels(birthplacecountry)[levels(birthplacecountry)=="ENG"] <- "England"
+  levels(birthplacecountry)[levels(birthplacecountry)=="DOM"] <- "Dominican Republic (the)"
+  levels(birthplacecountry)[levels(birthplacecountry)=="DEU"] <- "Germany"
+  levels(birthplacecountry)[levels(birthplacecountry)=="CUB"] <- "Cuba"
+  levels(birthplacecountry)[levels(birthplacecountry)=="CRI"] <- "Costa Rica"
+  levels(birthplacecountry)[levels(birthplacecountry)=="COG"] <- "Congo (the)"
+  levels(birthplacecountry)[levels(birthplacecountry)=="CMR"] <- "Cameroon"
+  levels(birthplacecountry)[levels(birthplacecountry)=="CIV"] <- "Cote d'Ivoire"
+  levels(birthplacecountry)[levels(birthplacecountry)=="CAN"] <- "Canada"
+  levels(birthplacecountry)[levels(birthplacecountry)=="BRB"] <- "Barbados"
+  levels(birthplacecountry)[levels(birthplacecountry)=="BLZ"] <- "Belize"
+  levels(birthplacecountry)[levels(birthplacecountry)=="BHS"] <- "Bahamas (the)"
+  levels(birthplacecountry)[levels(birthplacecountry)=="ARE"] <- "United Arab Emirates (the)"
+
+  
+  new.d <- data.frame(new.d, birthplacecountry)
+  new.d <- apply_labels(new.d, birthplacecountry = "Country of birth")
+  
+  cro(new.d$birthplacecountry)
+  #cro(new.d$registryid, new.d$birthplacecountry)
+  
+  }
+
+```
+
+```{r birthplacecountry smry}
+temp.d <- data.frame (new.d.1, birthplacecountry)
+summarytools::view(dfSummary(temp.d$birthplacecountry, style = 'grid', max.distinct.values = 100, report.title = 'All Data'))
+lapply(unique(new.d$registryid), FUN = function(loc){
+   summarytools::view(dfSummary(temp.d[new.d$registryid == loc, ], style = 'grid', max.distinct.values = 100),
+                       method = 'render', report.title = as.character(loc))
+})
+rm(temp.d)
+```
+
+# DATE OF DIAGNOSIS
+Date of initial diagnosis by a recognized medical practitioner for the tumor being reported whether clinically or microscopically confirmed. See Chapter X for date format.
+```{r data of diagnosis }
+if("dateofdiagnosis" %in% varName.list) {
+  dateofdiagnosis <- trimws(d[,"dateofdiagnosis"])
+  #new.d.n <- data.frame(new.d.n, dateofdiagnosis) # keep NAACCR coding
+  
+  select99 <- substr(dateofdiagnosis, start=7, stop=8)=="99"
+  dateofdiagnosis[select99] <- substr(dateofdiagnosis[select99], start=1, stop=6)
+  select6 <- nchar(trimws(dateofdiagnosis))==6
+  dateofdiagnosis[select6] <- as.Date(as.yearmon(dateofdiagnosis[select6], c("%Y%m")))
+  select8 <- nchar(trimws(dateofdiagnosis))==8
+  dateofdiagnosis[select8] <- as.Date(dateofdiagnosis[select8], c("%Y%m%d"))
+  
+  dateofdiagnosis <- as.Date(as.numeric(dateofdiagnosis), origin = "1970-01-01")
+  new.d <- data.frame(new.d, dateofdiagnosis)
+  new.d <- apply_labels(new.d, dateofdiagnosis = "Date of Diagnosis")
+  summary(new.d$dateofdiagnosis)
+  
+  
+  #by(new.d$dateofdiagnosis, new.d$registryid, summary)
+}
+temp.d <- data.frame (new.d.1, dateofdiagnosis)
+
+lapply(unique(new.d$registryid), FUN = function(loc){
+   summary(temp.d[new.d$registryid == loc, ])
+})
+rm(temp.d)
+
+```
+
+# PRIMARY SITE
+Code for the primary site of the tumor being reported using either ICD-O-2 or ICD-O-3. NAACCR adopted ICD-O-2 as the standard coding system for tumors diagnosed beginning January 1, 1992. In addition, NAACCR recommended that tumors diagnosed prior to 1992 be converted to ICD-O-2. The topography (primary site) codes did not change between ICD-O-2 and ICD-O-3.
+```{r primary site of tumor }
+if("primarysite" %in% varName.list) {
+  primarysite <- as.factor(d[,"primarysite"])
+  levels(primarysite) <- list(Prostate="C619") # other codings become NA
+  new.d <- data.frame(new.d, primarysite)
+  new.d <- apply_labels(new.d, primarysite = "Primary Tumor Site")
+  
+  cro(new.d$primarysite)# this is pretty but doesn't show NAs
+  summary(new.d$primarysite)
+}
+
+```
+
+# GRADE
+Code for the grade or degree of differentiation of the reportable tumor. For lymphomas and leukemias, field also is used to indicate T-, B-, Null-, or NK-cell origin.  
+See the grade tables on page 67 of ICD-O-3.16 See also the most recent CoC STORE manual and SEER Program Code Manual, for site specific coding rules and conversions.
+
+1	Grade I  
+2	Grade II  
+3	Grade III  
+4	Grade IV  
+5	T-cell  
+6	B-cell  
+7	Null cell  
+8	NK (natural killer) cell  
+9	Grade/differentiation unknown, not stated, or not applicable  
+Comment: Use the most recent Hematopoietic and Lymphoid rules for assigning grades 5-8.  
+```{r grade }
+if("grade" %in% varName.list) {
+  grade <- as.factor(d[,"grade"])
+  levels(grade) <- list(Grade_I="1",
+                        Grade_II="2",
+                        Grade_III="3",
+                        Grade_IV="4",
+                        T_cell="5",
+                        B_cell="6",
+                        Null_cell="7",
+                        NK_cell="8",
+                        Unknown="9")
+  new.d <- data.frame(new.d, grade)
+  new.d <- apply_labels(new.d, grade = "Tumor Grade")
+  
+  cro(new.d$grade)# this is pretty but doesn't show NAs
+  #summary(new.d$grade)
+  summarytools::freq(new.d$grade, style = "rmarkdown")
+
+
+}
+
+```
+
+# TYPE OF REPORTING SOURCE
+This variable codes the source documents used to abstract the majority of information on the tumor being reported. This may not be the source of original case finding (for example, if a case is identified through a pathology laboratory report review and all source documents used to abstract the case are from the physician’s office, code this item 4).  
+
+Rationale
+The code in this field can be used to explain why information may be incomplete on a tumor. For example, death certificate only cases have unknown values for many data items, so one may want to exclude them from some analyses. The field also is used to monitor the success of non-hospital case reporting and follow-back mechanisms. All population-based registries should have some death certificate-only cases where no hospital admission was involved, but too high a percentage can imply both shortcomings in case-finding and that follow-back to uncover missed hospital reports was not complete.
+
+Coding Instructions
+Code in the following priority order: 1, 2, 8, 4, 3, 5, 6, 7. This is a change to reflect the addition of codes 2 and 8 and to prioritize laboratory reports over nursing home reports. The source facilities included in the previous code 1 (hospital inpatient and outpatient) are split between codes 1, 2, and 8.
+
+This data item is intended to indicate the completeness of information available to the abstractor. Reports from health plans (e.g., Kaiser, Veterans Administration, military facilities) in which all diagnostic and treatment information is maintained centrally and is available to the abstractor are expected to be at least as complete as reports for hospital inpatients, which is why these sources are grouped with inpatients and given the code with the highest priority.
+
+Sources coded with '2' usually have complete information on the cancer diagnosis, staging, and treatment.
+
+Sources coded with '8' would include, but would not be limited to, outpatient surgery and nuclear medicine services. A physician's office that calls itself a surgery center should be coded as a physician's office. Surgery centers are equipped and staffed to perform surgical procedures under general anesthesia. If a physician's office calls itself a surgery center, but cannot perform surgical procedures under general anesthesia, code as a physician office.
+
+Codes
+1	Hospital inpatient; Managed health plans with comprehensive, unified medical records
+2	Radiation Treatment Centers or Medical Oncology Centers (hospital-affiliated or independent)
+3	Laboratory only (hospital-affiliated or independent)
+4	Physician's office/private medical practitioner (LMD)
+5	Nursing/convalescent home/hospice
+6	Autopsy only
+7	Death certificate only
+8	Other hospital outpatient units/surgery centers
+```{r type of reporting source}
+if("typeofreportingsource" %in% varName.list) {
+  typeofreportingsource <- as.factor(d[,"typeofreportingsource"])
+  levels(typeofreportingsource) <- list(Hospital="1",
+                                 Radiation_Tx="2",
+                                 Laboratory_Only="3",
+                                 Physician="4",
+                                 Nursing="5",
+                                 Autopsy="6",
+                                 Death_Certificate="7",
+                                 Other_Hospital_Unit="8")
+  new.d <- data.frame(new.d, typeofreportingsource)
+  new.d <- apply_labels(new.d, typeofreportingsource = "Source of Tumor Information")
+  
+  #summary(new.d$typeofreportingsource)
+    summarytools::freq(new.d$typeofreportingsource, style = "rmarkdown")
+
+  
+}
+
+```
+
+                  
+# PRIMARY PAYER AT DX
+Description  
+Primary payer/insurance carrier at the time of initial diagnosis and/or treatment at the reporting facility.
+
+Rationale  
+This item is used in financial analysis and as an indicator for quality and outcome analyses.
+
+Codes  
+01	Not insured  
+02	Not insured, self-pay  
+10	Insurance, NOS  
+20	Private Insurance: Managed care, HMO, or PPO  
+21	Private Insurance: Fee-for-Service  
+31	Medicaid  
+35	Medicaid - Administered through a Managed Care plan  
+60	Medicare/Medicare, NOS  
+61	Medicare with supplement, NOS  
+62	Medicare - Administered through a Managed Care plan  
+63	Medicare with private supplement  
+64	Medicare with Medicaid eligibility  
+65	TRICARE  
+66	Military  
+67	Veterans Affairs  
+68	Indian/Public Health Service  
+99	Insurance status unknown
+```{r primary payer at dx }
+if("primarypayeratdx" %in% varName.list) {
+  primarypayeratdx <- as.factor(d[,"primarypayeratdx"])
+  levels(primarypayeratdx) <- list(Not_insured="1",
+                               Not_insured_self_pay="2",
+                               Insurance="10",
+                               Private_managed="20",
+                               Private_FFS="21", # fee-for-service
+                               Medicaid="31",
+                               Medicaid_managed_care="35",
+                               Medicare_medicare="60",
+                               Medicare_suppl="61",
+                               Medicare_managed_care="62",
+                               Medicare_private_suppl="63",
+                               Medicare_medicaid="64",
+                               TRICARE="65",
+                               Military="66",
+                               Veterans_Affairs="67",
+                               Indian_PHS="68",
+                               Unknown="99")
+    primarypayeratdx <- relevel(primarypayeratdx, ref="Private_managed")
+    new.d <- data.frame(new.d, primarypayeratdx)
+    new.d <- apply_labels(new.d, primarypayeratdx = "Primary payer/insurance at the time of diagnosis")
+    #summary(new.d$primarypayeratdx)
+    summarytools::freq(new.d$primarypayeratdx, style = "rmarkdown")
+
+}
+
+```
+
+# DERIVED SUMMARY STAGE 2018
+Description  
+Derived Summary Stage 2018 is derived using the EOD data collection system (EOD Primary Tumor [772], EOD Regional Nodes [774] and EOD Mets [776]) algorithm. Other data items may be included in the derivation process. Effective for cases diagnosed 1/1/2018+.
+
+Rationale  
+The SEER program has collected staging information on cases since its inception in 1973. Summary Stage groups cases into broad categories of in situ, local, regional, and distant. Summary Stage can be used to evaluate disease spread at diagnosis, treatment patterns and outcomes over time.
+ 
+Derived Summary Stage 2018 [762] is only available at the central registry level.
+Note: This data item was included in Standards Volume II, Version 16; however, it was not implemented until 2018.
+
+Codes  
+0	In situ  
+1	Localized  
+2	Regional, direct extension only  
+3	Regional, regional lymph nodes only  
+4	Regional, direct extension and regional lymph nodes  
+7	Distant  
+8	Benign, borderline  
+9	Unknown if extension or metastasis (unstaged, unknown, or unspecified)  
+Death certificate only case  
+```{r derived summary stage 2018 }
+if("derivedsummarystage2018" %in% varName.list) {
+  derivedsummarystage2018 <- as.factor(d[,"derivedsummarystage2018"])
+  levels(derivedsummarystage2018) <- list(In_situ="0",
+                                          Localized="1",
+                                          Regional_direct="2",
+                                          Regional_regional="3",
+                                          Regional_direct_regional="4",
+                                          Distant="7",
+                                          Benign_borderline="8",
+                                          Unknown="9")
+    derivedsummarystage2018 <- relevel(derivedsummarystage2018, ref="Localized")
+    new.d <- data.frame(new.d, derivedsummarystage2018)
+    new.d <- apply_labels(new.d, derivedsummarystage2018 = "Tumor Staging")
+    #summary(new.d$derivedsummarystage2018)
+    summarytools::freq(new.d$primarypayeratdx, style = "rmarkdown")
+
+}
+
+```
+
+# DERIVED EOD 2018 STAGE GROUP
+Description  
+Derived EOD 2018 Stage Group is derived using the EOD data collection system (EOD Primary Tumor [772], EOD Regional Nodes [774] and EOD Mets [776]) algorithm. Other data items may be included in the derivation process. Effective for cases diagnosed 1/1/2018+.
+
+Rationale  
+Derived EOD 2018 Stage Group can be used to evaluate disease spread at diagnosis, treatment patterns and outcomes over time.
+ 
+Derived EOD 2018 Stage group is only available at the central registry level.
+
+Codes: See the most current version of EOD (https://staging.seer.cancer.gov/) for rules and site-specific codes and coding structures.
+```{r derived EOD stage group 2018 }
+if("derivedeod2018stagegroup" %in% varName.list) {
+  derivedeod2018stagegroup <- as.factor(trimws(d[,"derivedeod2018stagegroup"]))
+  # THIS CODING NEEDS TO BE CONFIRMED
+  levels(derivedeod2018stagegroup) <- list(T1="1",
+                                          T1B="1B",
+                                          T2A="2A",
+                                          T2B="2B",
+                                          T2C="2C",
+                                          T3="3",
+                                          T3A="3A",
+                                          T3B="3B",
+                                          T3C="3C",
+                                          T4="4",
+                                          T4A="4A",
+                                          T4B="4B",
+                                          Do_Not_Know="88",
+                                          Unknown="99")
+    derivedeod2018stagegroup <- relevel(derivedeod2018stagegroup, ref="T1")
+    new.d <- data.frame(new.d, derivedeod2018stagegroup)
+    new.d <- apply_labels(new.d, derivedeod2018stagegroup = "Tumor Stage Group")
+    #summary(new.d$derivedeod2018stagegroup)
+    summarytools::freq(new.d$primarypayeratdx, style = "rmarkdown")
+
+}
+
+```
+
+                  
+# Final Summary
+```{r final summary}
+summarytools::view(dfSummary(new.d, style = 'grid', max.distinct.values = 100), method="browser", report.title="All Data")
+lapply(unique(new.d$registryid), FUN=function(loc) { summarytools::view(dfSummary(new.d[new.d$registryid==loc,], style = 'grid', max.distinct.values = 100), method="browser", report.title = as.character(loc))})
+```
+

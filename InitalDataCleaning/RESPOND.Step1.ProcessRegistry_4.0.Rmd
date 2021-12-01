@@ -1,0 +1,3600 @@
+---
+title: RESPOND-Registry data
+author: "Weijia Hu"
+date: "`r Sys.time()`"
+output:
+  html_document:
+    df_print: paged
+    code_folding: hide
+  pdf_document: default
+---
+
+```{r setup, include=FALSE, echo=FALSE}
+require("RPostgreSQL") # for PostgreSQL
+library(zoo) # for date conversion
+library(expss) # for labels
+library(DBI) # for Database connectivity
+library(summarytools) # for summarizing variables
+library(tidyverse)
+library(plyr)
+library(knitr) # for creating tables
+# set working directory
+#setwd("~/Google Drive File Stream/My Drive/Projects/RESPOND/CORE D/InitalDataCleaning")
+
+```
+
+```{r input registry data, echo=FALSE}
+load("VCombAll20210208.Rda")
+d <- JoinAllRegScantron
+#print(names(d))
+```
+
+<br>
+
+This report is step one of a three step process for data organization in the RESPOND study. The three steps include:
+
+1. Data processing: investigation and reporting  
+    + Evaluate the data received from the SEER registries and scantron surveys  
+    + Understand the the variables, their values, distributions, and identify potential problems  
+    + From this report we can propose potential solutions on how to handle missing or unknown data, alternative values, or duplicated or problematic records  
+2. Data cleaning  
+    + Implement solutions for data cleaning given decisions from step 1 report  
+    + Keep data in detailed format  
+    + Create composite variables  
+3. Data creation  
+    + Output data to an "analysis ready" R data set  
+    + Output data to a file that facilitates input into SAS  
+
+
+```{r first look - registry data - 30 vars, echo=FALSE}
+varName.list <- names(d)
+varName.list <- c("siteid",
+                  "birthplace","birthplacestate","birthplacecountry",
+                  "dateofdiagnosis",
+                  "primarysite", "grade",   
+                  "typeofreportingsource","primarypayeratdx",
+                  "derivedsummarystage2018","derivedeod2018stagegroup",
+                  "rxsummtreatmentstatus","rxsummsurgprimsite","rxsummradiation","rxsummchemo","rxsummhormone",
+                  "vitalstatus",
+                  "derivedss2000","derivedajcc7stagegrp","derivedseercmbstggrp",
+                  "gleasonpatternsclinical","gleasonpatternspathological","gleasonscoreclinical","gleasonscorepathological","gleasontertiarypattern",
+                  "gradeclinical","gradepathological",
+                  "numberofcoresexamined","numberofcorespositive",
+                  "prostatepathologicalextension",
+                  "psalabvalue")
+d <- d[,varName.list]
+#print(names(d))
+#print(dim(d))
+
+new.d <- data.frame(matrix(ncol=0, nrow=nrow(d)))
+new.d.n <- data.frame(matrix(ncol=0, nrow=nrow(d)))
+new.d.1 <- data.frame(matrix(ncol=0, nrow=nrow(d)))
+
+```
+
+The working dataset used in this report results in a database join of all Scantron Surveys currently processed with all Cancer Registry files received to date from study centers, which were able to be linked based on available identifiers.  
+    - This working dataset was created on 2.8.2020  
+    - The dataset includes `r nrow(d)` records  
+    - The dataset includes `r ncol(d)` variables  
+        - Variables include: `r paste(names(d))`  
+
+
+<br>
+
+# SITE ID	
+
+<br>
+
+- Codes
+   + 10 Greater CA
+   + 20 Georgia
+   + 25 North Carolina
+   + 30 Northern CA
+   + 40 Louisiana
+   + 50 New Jersey
+   + 60 Detroit
+   + 61 Michigan
+   + 70 Texas
+   + 80 Los Angeles County
+   + 81 USC-Other
+   + 82 USC-MEC
+   + 90 New York
+   + 94 Florida
+   + 95 WebRecruit-Limbo
+   + 99 WebRecruit
+
+<br>
+
+```{css, echo = FALSE}
+caption {
+      color: Black;
+      font-weight: bold;
+      font-size: 1.5em;
+      text-align: center
+    }
+```
+
+```{r siteid}
+
+if("siteid" %in% varName.list) { 
+  siteid <- as.factor(trimws(d[,"siteid"]))
+  #new.d.n <- data.frame(new.d.n, siteid) # keep NAACCR coding
+  
+  # NEED REGISTRY NAMES!!
+ 
+  
+  #replace number with names
+  
+  levels(siteid)[levels(siteid)=="80"] <- "Los Angeles County.80"
+  levels(siteid)[levels(siteid)=="30"] <- "Northern CA.30"
+  levels(siteid)[levels(siteid)=="10"] <- "Greater CA.10"
+  levels(siteid)[levels(siteid)=="60"] <- "Detroit.60"
+  levels(siteid)[levels(siteid)=="40"] <- "Louisiana.40"
+  levels(siteid)[levels(siteid)=="20"] <- "Georgia.20"
+  levels(siteid)[levels(siteid)=="61"] <- "Michigan.61"
+  
+  
+  new.d <- data.frame(new.d, siteid)
+  new.d <- apply_labels(new.d, siteid = "Site ID")
+  new.d.1 <- data.frame(new.d.1, siteid)
+  
+  #cro(new.d$siteid) # this is pretty but doesn't show NAs
+  #summary(new.d$siteid)
+  
+  #Using kable function to form a nice table
+  
+  siteid_count<-count(new.d$siteid)
+  colnames(siteid_count)<- c("Registry", "Total")
+  kable(siteid_count, format = "simple", align = 'l', caption = "Overview of 8 Registries")
+  }
+
+```
+
+<br>
+
+
+# BIRTHPLACE {.tabset}
+
+<br>
+
+- Description: Code for place of birth of the patient. If a patient has multiple tumors, all records should contain the same code. 
+
+- Rationale: Place of Birth is helpful for patient matching and can be used when reviewing race and ethnicity. In addition, adding birthplace data to race and ethnicity allows for a more specific definition of the population being reported. Careful descriptions of ancestry, birthplace, and immigration history of populations studied are needed to make the basis for classification into ethnic groups clear. Birthplace has been associated with variation in genetic, socioeconomic, cultural, and nutritional characteristics that affect patterns of disease. A better understanding of the differences within racial and ethnic categories also can help states develop effective, culturally sensitive public health prevention programs to decrease the prevalence of high-risk behaviors and increase the use of preventive services.
+
+- Note: For cases diagnosed January 1, 2013, and later, Birthplace--State [252] and Birthplace--Country [254] replace Birthplace [250]. 
+
+- Codes: See Appendix B  for numeric and alphabetic lists of places and codes (also see Appendix B of the SEER Program Code Manual at seer.cancer.gov/tools/codingmanuals/index.html).
+
+- Many numeric codes need to be identified!
+
+- Reference page: http://datadictionary.naaccr.org/default.aspx?c=10&Version=18#250  
+
+<br>
+
+## All data
+
+```{r birthplace, message=FALSE, results='asis'}
+st_css() #IMPORTANT!
+if("birthplace" %in% varName.list) { 
+  birthplace <- as.factor(trimws(d[,"birthplace"]))
+  # recode for interpretable birthplace
+  #new.d.n <- data.frame(new.d.n, birthplace) # keep NAACCR coding
+  levels(birthplace)[levels(birthplace)=="999"] <- "Unkown.999"
+  levels(birthplace)[levels(birthplace)=="97"] <- "Sonoma (Greater California).97"
+  levels(birthplace)[levels(birthplace)=="75"] <- "Kiowa.75"
+  levels(birthplace)[levels(birthplace)=="73"] <- "Ouachita.73"
+  levels(birthplace)[levels(birthplace)=="5"] <- "Bristol.5"
+  levels(birthplace)[levels(birthplace)=="33"] <- "Burke.33"
+  levels(birthplace)[levels(birthplace)=="11"] <- "Cayuga.11"
+  levels(birthplace)[levels(birthplace)=="1"] <- "Appling.1"
+  
+  
+  new.d <- data.frame(new.d, birthplace)
+  new.d <- apply_labels(new.d, birthplace = "Place of birth")
+  
+  #cro(new.d$birthplace)
+  #cro(new.d$siteid, new.d$birthplace)
+  
+  }
+  temp.d <- data.frame (new.d.1, birthplace)
+  summarytools::view(dfSummary(new.d$birthplace, style = 'grid',
+                               max.distinct.values = 100, plain.ascii =   FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+```
+
+## LA County
+
+```{r birthplace 1.LA County,echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Los Angeles County.80"), ]
+birthplace<-as.data.frame(temp.dd$birthplace)
+names(birthplace)<-"birthplace_state"
+summarytools::view(dfSummary(birthplace, style = 'grid', max.distinct.values = 100, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE ), method = "render")
+rm(temp.dd)
+```
+
+## Northern CA
+
+```{r birthplace 2.Northern CA,echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Northern CA.30"), ]
+birthplace<-as.data.frame(temp.dd$birthplace)
+names(birthplace)<-"birthplace_state"
+summarytools::view(dfSummary(birthplace, style = 'grid', max.distinct.values = 100, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Greater CA
+
+```{r birthplace 3.Greater CA,echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Greater CA.10"), ]
+birthplace<-as.data.frame(temp.dd$birthplace)
+names(birthplace)<-"birthplace_state"
+summarytools::view(dfSummary(birthplace, style = 'grid', max.distinct.values = 100, plain.ascii = FALSE, valid.col = FALSE , headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Detroit
+
+```{r birthplace 4.Detroit,echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Detroit.60"), ]
+birthplace<-as.data.frame(temp.dd$birthplace)
+names(birthplace)<-"birthplace_state"
+summarytools::view(dfSummary(birthplace, style = 'grid', max.distinct.values = 100, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE ), method = "render")
+rm(temp.dd)
+```
+
+## Louisiana
+
+```{r birthplace 5.Louisiana,echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Louisiana.40"), ]
+birthplace<-as.data.frame(temp.dd$birthplace)
+names(birthplace)<-"birthplace_state"
+summarytools::view(dfSummary(birthplace, style = 'grid', max.distinct.values = 100, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE ), method = "render")
+rm(temp.dd)
+```
+
+## Georgia
+
+```{r birthplace 6.Georgia,echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Georgia.20"), ]
+birthplace<-as.data.frame(temp.dd$birthplace)
+names(birthplace)<-"birthplace_state"
+summarytools::view(dfSummary(birthplace, style = 'grid', max.distinct.values = 100, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE ), method = "render")
+rm(temp.dd)
+```
+
+## Michigan
+
+```{r birthplace 7.Michigan,echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Michigan.61"), ]
+birthplace<-as.data.frame(temp.dd$birthplace)
+names(birthplace)<-"birthplace_state"
+summarytools::view(dfSummary(birthplace, style = 'grid', max.distinct.values = 100, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+
+
+<br>
+
+# BIRTHPLACE--STATE {.tabset}
+
+<br>
+
+- USPS abbreviation for the state, commonwealth, U.S. possession; or CanadaPost abbreviation for the Canadian province/territory in which the patient was born. If the patient has multiple primaries, the state of birth is the same for each tumor. This data item became part of the NAACCR transmission record effective with Volume II, Version 13 in order to include country and state for each geographic item and to use interoperable codes. It supplements the item BIRTHPLACE--COUNTRY [254]. These two data items are intended to replace the item BIRTHPLACE [250].  
+  
+- Rationale: This is a modification of the current item Birthplace [250] item in order to make use of standard codes, rather than using geographic codes that are only used by cancer registries. The intention is that item 250 be converted to populate the new corresponding, more standard, data items.
+Codes  
+
+- See Appendix B for numeric and alphabetic lists of places and codes (also see Appendix B of the SEER Program Code Manual at seer.cancer.gov/tools/codingmanuals/index.html).
+
+- Reference page: http://datadictionary.naaccr.org/default.aspx?c=10&Version=18#252
+  
+<br>
+
+## All data
+
+```{r birthplace state, results='asis', message=FALSE}
+st_css() #IMPORTANT!
+if("birthplacestate" %in% varName.list) {
+  birthplacestate <- as.factor(trimws(d[,"birthplacestate"]))
+  # recode for interpretable birthplace state
+  #new.d.n <- data.frame(new.d.n, birthplacestate) # keep NAACCR coding
+  levels(birthplacestate)[levels(birthplacestate)=="XX"] <- "Unknown.XX"
+  levels(birthplacestate)[levels(birthplacestate)=="YY"] <- "Unknown.YY"
+  levels(birthplacestate)[levels(birthplacestate)=="ZZ"] <- "Unknown.ZZ"
+
+  new.d <- data.frame(new.d, birthplacestate)
+  new.d <- apply_labels(new.d, birthplacestate = "State of birth")
+  
+
+  
+  #cro(new.d$birthplacestate)
+  #cro(new.d$siteid, new.d$birthplacestate)
+  
+  }
+temp.d <- data.frame (new.d.1, birthplacestate)
+summarytools::view(dfSummary(new.d$birthplacestate, style = 'grid', max.distinct.values = 100, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+```
+
+## LA County
+
+```{r state 1.LA County, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Los Angeles County.80"), ]
+birthplace_state<-as.data.frame(temp.dd$birthplacestate)
+names(birthplace_state)<-"birthplace_state"
+summarytools::view(dfSummary(birthplace_state, style = 'grid', max.distinct.values = 100, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE ), method = "render")
+rm(temp.dd)
+```
+
+## Northern CA
+
+```{r state 2.Northern CA, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Northern CA.30"), ]
+birthplace_state<-as.data.frame(temp.dd$birthplacestate)
+names(birthplace_state)<-"birthplace_state"
+summarytools::view(dfSummary(birthplace_state, style = 'grid', max.distinct.values = 100, plain.ascii = FALSE, valid.col = FALSE , headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Greater CA
+
+```{r state 3.Greater CA, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Greater CA.10"), ]
+birthplace_state<-as.data.frame(temp.dd$birthplacestate)
+names(birthplace_state)<-"birthplace_state"
+summarytools::view(dfSummary(birthplace_state, style = 'grid', max.distinct.values = 100, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE ), method = "render")
+rm(temp.dd)
+```
+
+## Detroit
+
+```{r state 4.Detroit, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Detroit.60"), ]
+birthplace_state<-as.data.frame(temp.dd$birthplacestate)
+names(birthplace_state)<-"birthplace_state"
+summarytools::view(dfSummary(birthplace_state, style = 'grid', max.distinct.values = 100, plain.ascii = FALSE, valid.col = FALSE, graph.magnif = 0.75, headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Louisiana
+
+```{r state 5.Louisiana, results='asis',echo=FALSE}
+
+temp.dd <- temp.d[which(temp.d$siteid == "Louisiana.40"), ]
+birthplace_state<-as.data.frame(temp.dd$birthplacestate)
+names(birthplace_state)<-"birthplace_state"
+summarytools::view(dfSummary(birthplace_state, style = 'grid', max.distinct.values = 100, plain.ascii = FALSE, valid.col = FALSE, graph.magnif = 0.75, headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Georgia
+
+```{r state 6.Georgia, results='asis',echo=FALSE}
+
+temp.dd <- temp.d[which(temp.d$siteid == "Georgia.20"), ]
+birthplace_state<-as.data.frame(temp.dd$birthplacestate)
+names(birthplace_state)<-"birthplace_state"
+summarytools::view(dfSummary(birthplace_state, style = 'grid', max.distinct.values = 100, plain.ascii = FALSE, valid.col = FALSE, graph.magnif = 0.75, headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Michigan
+
+```{r state 7.Michigan, results='asis',echo=FALSE}
+
+temp.dd <- temp.d[which(temp.d$siteid == "Michigan.61"), ]
+birthplace_state<-as.data.frame(temp.dd$birthplacestate)
+names(birthplace_state)<-"birthplace_state"
+summarytools::view(dfSummary(birthplace_state, style = 'grid', max.distinct.values = 100, plain.ascii = FALSE, valid.col = FALSE, graph.magnif = 0.75, headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+<br>
+
+# BIRTHPLACE--COUNTRY  {.tabset}
+
+<br>
+
+- Code for the country in which the patient was born. If the patient has multiple tumors, all records should contain the same code. This data item became part of the NAACCR transmission record effective with Volume II, Version 13 in order to include country and state for each geographic item and to use interoperable codes. It supplements the item BIRTHPLACE--STATE [252]. These two data items are intended to replace the use of BIRTHPLACE [250].  
+
+- Rationale: Place of Birth is helpful for patient matching and can be used when reviewing race and ethnicity. It is an important item in algorithms for imputing race and ethnicity. In addition, adding birthplace data to race and ethnicity allows for a more specific definition of the population being reported. Careful descriptions of ancestry, birthplace, and immigration history of populations studied are needed to make the basis for classification into ethnic groups clear. Birthplace has been associated with variation in genetic, socioeconomic, cultural, and nutritional characteristics that affect patterns of disease. A better understanding of the differences within racial and ethnic categories also can help states develop effective, culturally-sensitive public health prevention programs to decrease the prevalence of high-risk behaviors and increase the use of preventive services.  
+
+- See Appendix B for numeric and alphabetic lists of places and codes (also see Appendix B of the SEER Program Code Manual at seer.cancer.gov/tools/codingmanuals/index.html). 
+
+- Reference page: http://datadictionary.naaccr.org/default.aspx?c=10&Version=18#254
+
+<br>
+
+## All data
+
+```{r birthplace country, results='asis', message=FALSE}
+st_css() #IMPORTANT!}
+if("birthplacecountry" %in% varName.list) {
+  birthplacecountry <- as.factor(trimws(d[,"birthplacecountry"]))
+  #new.d.n <- data.frame(new.d.n, birthplacecountry) # keep NAACCR coding
+  # recode for interpretable birthplace country
+  levels(birthplacecountry)[levels(birthplacecountry)=="ZZU"] <- "Unknown.ZZU"
+  levels(birthplacecountry)[levels(birthplacecountry)=="ZZF"] <- "Africa.ZZF"
+  levels(birthplacecountry)[levels(birthplacecountry)=="ZZX"] <- "Non_US.ZZX"
+  levels(birthplacecountry)[levels(birthplacecountry)=="ZZE"] <- "Europe NOS.ZZE"
+  levels(birthplacecountry)[levels(birthplacecountry)=="ZZC"] <- "Central American NOS.ZZC"
+  levels(birthplacecountry)[levels(birthplacecountry)=="ZWE"] <- "Zimbabwe.ZWE"
+  levels(birthplacecountry)[levels(birthplacecountry)=="XWF"] <- "West Africa, NOS (French Africa, NOS).XWF"
+  levels(birthplacecountry)[levels(birthplacecountry)=="WSM"] <- "Samoa.WSM"
+  levels(birthplacecountry)[levels(birthplacecountry)=="VIR"] <- "Virgin Islands (U.S.).VIR"
+  levels(birthplacecountry)[levels(birthplacecountry)=="USA"] <- "United States of America (the).USA"
+  levels(birthplacecountry)[levels(birthplacecountry)=="UGA"] <- "Uganda.UGA"
+  levels(birthplacecountry)[levels(birthplacecountry)=="TTO"] <- "Trinidad and Tobago.TTO"
+  levels(birthplacecountry)[levels(birthplacecountry)=="SOM"] <- "Somalia.SOM"
+  levels(birthplacecountry)[levels(birthplacecountry)=="SLE"] <- "Sierra Leone.SLE"
+  levels(birthplacecountry)[levels(birthplacecountry)=="SEN"] <- "Senegal.SEN"
+  levels(birthplacecountry)[levels(birthplacecountry)=="RWA"] <- "Rwanda.RWA"
+  levels(birthplacecountry)[levels(birthplacecountry)=="PRT"] <- "Portugal.PRT"
+  levels(birthplacecountry)[levels(birthplacecountry)=="PRI"] <- "Puerto Rico.PRI"
+  levels(birthplacecountry)[levels(birthplacecountry)=="PAN"] <- "Panama.PAN"
+  levels(birthplacecountry)[levels(birthplacecountry)=="NIC"] <- "Nicaragua.NIC"
+  levels(birthplacecountry)[levels(birthplacecountry)=="NGA"] <- "Nigeria.NGA"
+  levels(birthplacecountry)[levels(birthplacecountry)=="NER"] <- "Niger.NER"
+  levels(birthplacecountry)[levels(birthplacecountry)=="MEX"] <- "Mexico.MEX"
+  levels(birthplacecountry)[levels(birthplacecountry)=="LCA"] <- "Saint Lucia.LCA"
+  levels(birthplacecountry)[levels(birthplacecountry)=="LBR"] <- "Liberia.LBR"
+  levels(birthplacecountry)[levels(birthplacecountry)=="JPN"] <- "Japan.JPN"
+  levels(birthplacecountry)[levels(birthplacecountry)=="JAM"] <- "Jamaica.JAM"
+  levels(birthplacecountry)[levels(birthplacecountry)=="HUN"] <- "Hungary.HUN"
+  levels(birthplacecountry)[levels(birthplacecountry)=="HTI"] <- "Haiti.HTI"
+  levels(birthplacecountry)[levels(birthplacecountry)=="GUY"] <- "Guyana.GUY"
+  levels(birthplacecountry)[levels(birthplacecountry)=="GUM"] <- "Guam.GUM"
+  levels(birthplacecountry)[levels(birthplacecountry)=="GRD"] <- "Grenada.GRD"
+  levels(birthplacecountry)[levels(birthplacecountry)=="GMB"] <- "Gambia (the).GMB"
+  levels(birthplacecountry)[levels(birthplacecountry)=="GHA"] <- "Ghana.GHA"
+  levels(birthplacecountry)[levels(birthplacecountry)=="GEO"] <- "Georgia.GEO"
+  levels(birthplacecountry)[levels(birthplacecountry)=="GBR"] <- "United Kingdom of Great Britain and Northern Ireland (the).GBR"
+  levels(birthplacecountry)[levels(birthplacecountry)=="FRA"] <- "France.FRA"
+  levels(birthplacecountry)[levels(birthplacecountry)=="ETH"] <- "Ethiopia.ETH"
+  levels(birthplacecountry)[levels(birthplacecountry)=="ERI"] <- "Eritrea.ERI"
+  levels(birthplacecountry)[levels(birthplacecountry)=="ENG"] <- "England.ENG"
+  levels(birthplacecountry)[levels(birthplacecountry)=="DOM"] <- "Dominican Republic (the).DOM"
+  levels(birthplacecountry)[levels(birthplacecountry)=="DEU"] <- "Germany.DEU"
+  levels(birthplacecountry)[levels(birthplacecountry)=="CUB"] <- "Cuba.CUB"
+  levels(birthplacecountry)[levels(birthplacecountry)=="CRI"] <- "Costa Rica.CRI"
+  levels(birthplacecountry)[levels(birthplacecountry)=="COG"] <- "Congo (the).COG"
+  levels(birthplacecountry)[levels(birthplacecountry)=="CMR"] <- "Cameroon.CMR"
+  levels(birthplacecountry)[levels(birthplacecountry)=="CIV"] <- "Cote d'Ivoire.CIV"
+  levels(birthplacecountry)[levels(birthplacecountry)=="CAN"] <- "Canada.CAN"
+  levels(birthplacecountry)[levels(birthplacecountry)=="BRB"] <- "Barbados.BRB"
+  levels(birthplacecountry)[levels(birthplacecountry)=="BLZ"] <- "Belize.BLZ"
+  levels(birthplacecountry)[levels(birthplacecountry)=="BHS"] <- "Bahamas (the).BHS"
+  levels(birthplacecountry)[levels(birthplacecountry)=="ARE"] <- "United Arab Emirates (the).ARE"
+
+  
+  new.d <- data.frame(new.d, birthplacecountry)
+  new.d <- apply_labels(new.d, birthplacecountry = "Country of birth")
+  
+  #cro(new.d$birthplacecountry)
+  #cro(new.d$siteid, new.d$birthplacecountry)
+  
+  }
+temp.d <- data.frame (new.d.1, birthplacecountry)
+summarytools::view(dfSummary(new.d$birthplacecountry, style = 'grid', max.distinct.values = 100, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+```
+
+## LA County
+
+```{r country 1.LA County, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Los Angeles County.80"), ]
+birthplace_country<-as.data.frame(temp.dd$birthplacecountry)
+names(birthplace_country)<-"birthplace_country"
+summarytools::view(dfSummary(birthplace_country, style = 'grid', max.distinct.values = 100, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Northern CA
+
+```{r country 2.Northern CA, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Northern CA.30"), ]
+birthplace_country<-as.data.frame(temp.dd$birthplacecountry)
+names(birthplace_country)<-"birthplace_country"
+summarytools::view(dfSummary(birthplace_country, style = 'grid', max.distinct.values = 100, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Greater CA
+
+```{r country 3.Greater CA, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Greater CA.10"), ]
+birthplace_country<-as.data.frame(temp.dd$birthplacecountry)
+names(birthplace_country)<-"birthplace_country"
+summarytools::view(dfSummary(birthplace_country, style = 'grid', max.distinct.values = 100, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Detroit
+
+```{r country 4.Detroit, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Detroit.60"), ]
+birthplace_country<-as.data.frame(temp.dd$birthplacecountry)
+names(birthplace_country)<-"birthplace_country"
+summarytools::view(dfSummary(birthplace_country, style = 'grid', max.distinct.values = 100, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Louisiana
+
+```{r country 5.Louisiana, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Louisiana.40"), ]
+birthplace_country<-as.data.frame(temp.dd$birthplacecountry)
+names(birthplace_country)<-"birthplace_country"
+summarytools::view(dfSummary(birthplace_country, style = 'grid', max.distinct.values = 100, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Georgia
+
+```{r country 6.Georgia, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Georgia.20"), ]
+birthplace_country<-as.data.frame(temp.dd$birthplacecountry)
+names(birthplace_country)<-"birthplace_country"
+summarytools::view(dfSummary(birthplace_country, style = 'grid', max.distinct.values = 100, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Michigan
+
+```{r country 7.Michigan, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Michigan.61"), ]
+birthplace_country<-as.data.frame(temp.dd$birthplacecountry)
+names(birthplace_country)<-"birthplace_country"
+summarytools::view(dfSummary(birthplace_country, style = 'grid', max.distinct.values = 100, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+<br>
+
+# DATE OF DIAGNOSIS {.tabset}
+
+<br>
+
+- Date of initial diagnosis by a recognized medical practitioner for the tumor being reported whether clinically or microscopically confirmed. See Chapter X for date format.
+
+- For more discussion on determining date of diagnosis, consult the SEER Program Coding and Staging Manual or CoC STORE manual.
+
+- Reference page: http://datadictionary.naaccr.org/default.aspx?c=10&Version=21#390
+
+<br>
+
+## All data
+```{r data of diagnosis, results='asis', message=FALSE}
+if("dateofdiagnosis" %in% varName.list) {
+  dateofdiagnosis <- trimws(d[,"dateofdiagnosis"])
+  #new.d.n <- data.frame(new.d.n, dateofdiagnosis) # keep NAACCR coding
+  
+  select99 <- substr(dateofdiagnosis, start=7, stop=8)=="99"
+  dateofdiagnosis[select99] <- substr(dateofdiagnosis[select99], start=1, stop=6)
+  select6 <- nchar(trimws(dateofdiagnosis))==6
+  dateofdiagnosis[select6] <- as.Date(as.yearmon(dateofdiagnosis[select6], c("%Y%m")))
+  select8 <- nchar(trimws(dateofdiagnosis))==8
+  dateofdiagnosis[select8] <- as.Date(dateofdiagnosis[select8], c("%Y%m%d"))
+  select4 <- nchar(trimws(dateofdiagnosis))==4
+  dateofdiagnosis[select4] <- as.Date(dateofdiagnosis[select4], c("%Y"))
+
+
+  
+  dateofdiagnosis <- as.Date(as.numeric(dateofdiagnosis), origin = "1970-01-01")
+  new.d <- data.frame(new.d, dateofdiagnosis)
+  new.d <- apply_labels(new.d, dateofdiagnosis = "Date of Diagnosis")
+  #summary(new.d$dateofdiagnosis)
+  
+  
+  #by(new.d$dateofdiagnosis, new.d$siteid, summary)
+}
+temp.d <- data.frame (new.d.1, dateofdiagnosis)
+summarytools::view(dfSummary(new.d$dateofdiagnosis, style = 'grid', max.distinct.values = 100, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+
+```
+
+## LA County
+
+```{r dodiag 1.LA County, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Los Angeles County.80"), ]
+dateofdiagnosis<-as.data.frame(temp.dd$dateofdiagnosis)
+names(dateofdiagnosis)<-"date_of_diagnosis"
+summarytools::view(dfSummary(dateofdiagnosis, style = 'grid', max.distinct.values = 100, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Northern CA
+
+```{r dodiag 2.Northern CA, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Northern CA.30"), ]
+dateofdiagnosis<-as.data.frame(temp.dd$dateofdiagnosis)
+names(dateofdiagnosis)<-"date_of_diagnosis"
+summarytools::view(dfSummary(dateofdiagnosis, style = 'grid', max.distinct.values = 100, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Greater CA
+
+```{r dodiag 3.Greater CA, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Greater CA.10"), ]
+dateofdiagnosis<-as.data.frame(temp.dd$dateofdiagnosis)
+names(dateofdiagnosis)<-"date_of_diagnosis"
+summarytools::view(dfSummary(dateofdiagnosis, style = 'grid', max.distinct.values = 10, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Detroit
+
+```{r dodiag 4.Detroit, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Detroit.60"), ]
+dateofdiagnosis<-as.data.frame(temp.dd$dateofdiagnosis)
+names(dateofdiagnosis)<-"date_of_diagnosis"
+summarytools::view(dfSummary(dateofdiagnosis, style = 'grid', max.distinct.values = 10, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Louisiana
+
+```{r dodiag 5.Louisiana, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Louisiana.40"), ]
+dateofdiagnosis<-as.data.frame(temp.dd$dateofdiagnosis)
+names(dateofdiagnosis)<-"date_of_diagnosis"
+summarytools::view(dfSummary(dateofdiagnosis, style = 'grid', max.distinct.values = 10, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Georgia
+
+```{r dodiag 6.Georgia, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Georgia.20"), ]
+dateofdiagnosis<-as.data.frame(temp.dd$dateofdiagnosis)
+names(dateofdiagnosis)<-"date_of_diagnosis"
+summarytools::view(dfSummary(dateofdiagnosis, style = 'grid', max.distinct.values = 100, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Michigan
+
+```{r dodiag 7.Michigan, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Michigan.61"), ]
+dateofdiagnosis<-as.data.frame(temp.dd$dateofdiagnosis)
+names(dateofdiagnosis)<-"date_of_diagnosis"
+summarytools::view(dfSummary(dateofdiagnosis, style = 'grid', max.distinct.values = 10, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+<br>
+
+# PRIMARY SITE 
+
+<br>
+
+- Code for the primary site of the tumor being reported using either ICD-O-2 or ICD-O-3. NAACCR adopted ICD-O-2 as the standard coding system for tumors diagnosed beginning January 1, 1992. In addition, NAACCR recommended that tumors diagnosed prior to 1992 be converted to ICD-O-2. The topography (primary site) codes did not change between ICD-O-2 and ICD-O-3.
+
+- Reference page: http://datadictionary.naaccr.org/default.aspx?c=10&Version=18#400
+
+<br>
+
+```{r primary site of tumor}
+if("primarysite" %in% varName.list) {
+  primarysite <- as.factor(d[,"primarysite"])
+  levels(primarysite) <- list(Prostate="C619") # other codings become NA
+  new.d <- data.frame(new.d, primarysite)
+  new.d <- apply_labels(new.d, primarysite = "Primary Tumor Site")
+  
+  #cro(new.d$primarysite)# this is pretty but doesn't show NAs
+  primarysite<-count(new.d$primarysite)
+  colnames(primarysite)<- c("Primary site", "Total")
+  kable(primarysite, format = "simple", align = 'l', caption = "Overview of 8 Registries")
+}
+
+```
+
+<br>
+
+# GRADE {.tabset}
+
+<br>
+
+- Code for the grade or degree of differentiation of the reportable tumor. For lymphomas and leukemias, field also is used to indicate T-, B-, Null-, or NK-cell origin.  
+
+- See the grade tables on page 67 of ICD-O-3.16 See also the most recent CoC STORE manual and SEER Program Code Manual, for site specific coding rules and conversions.
+   + Grade I                                                      
+   + Grade II                                                      
+   + Grade III                                                    
+   + Grade IV                                                     
+   + T-cell                                                        
+   + B-cell                                                        
+   + Null cell                                                    
+   + NK (natural killer) cell                                    
+   + Grade/differentiation unknown, not stated, or not applicable 
+
+
+- Comment: Use the most recent Hematopoietic and Lymphoid rules for assigning grades 5-8.
+
+- Reference page: http://datadictionary.naaccr.org/default.aspx?c=10&Version=18#440																													
+
+<br>
+
+## All data
+```{r grade, message=FALSE}
+if("grade" %in% varName.list) {
+  grade <- as.factor(d[,"grade"])
+  levels(grade) <- list(Grade_I.1="1",
+                        Grade_II.2="2",
+                        Grade_III.3="3",
+                        Grade_IV.4="4",
+                        T_cell.5="5",
+                        B_cell.6="6",
+                        Null_cell.7="7",
+                        NK_cell.8="8",
+                        Unknown.9="9")
+  new.d <- data.frame(new.d, grade)
+  new.d <- apply_labels(new.d, grade = "Tumor Grade")
+  
+  #cro(new.d$grade)# this is pretty but doesn't show NAs
+  #summary(new.d$grade)
+  }
+temp.d <- data.frame (new.d.1, grade)
+summarytools::view(dfSummary(new.d$grade, style = 'grid', max.distinct.values = 10, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+```
+
+## LA County
+
+```{r grade 1.LA County, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Los Angeles County.80"), ]
+grade<-as.data.frame(temp.dd$grade)
+names(grade)<-"grade"
+summarytools::view(dfSummary(grade, style = 'grid', max.distinct.values = 100, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Northern CA
+
+```{r grade 2.Northern CA, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Northern CA.30"), ]
+grade<-as.data.frame(temp.dd$grade)
+names(grade)<-"grade"
+summarytools::view(dfSummary(grade, style = 'grid', max.distinct.values = 100, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Greater CA
+
+```{r grade 3.Greater CA, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Greater CA.10"), ]
+grade<-as.data.frame(temp.dd$grade)
+names(grade)<-"grade"
+summarytools::view(dfSummary(grade, style = 'grid', max.distinct.values = 100, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Detroit
+
+```{r grade 4.Detroit, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Detroit.60"), ]
+grade<-as.data.frame(temp.dd$grade)
+names(grade)<-"grade"
+summarytools::view(dfSummary(grade, style = 'grid', max.distinct.values = 100, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Louisiana
+
+```{r grade 5.Louisiana, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Louisiana.40"), ]
+grade<-as.data.frame(temp.dd$grade)
+names(grade)<-"grade"
+summarytools::view(dfSummary(grade, style = 'grid', max.distinct.values = 100, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Georgia
+
+```{r grade 6.Georgia, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Georgia.20"), ]
+grade<-as.data.frame(temp.dd$grade)
+names(grade)<-"grade"
+summarytools::view(dfSummary(grade, style = 'grid', max.distinct.values = 100, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Michigan
+
+```{r grade 7.Michigan, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Michigan.61"), ]
+grade<-as.data.frame(temp.dd$grade)
+names(grade)<-"grade"
+summarytools::view(dfSummary(grade, style = 'grid', max.distinct.values = 100, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+<br>
+
+# TYPE OF REPORTING SOURCE {.tabset}
+
+<br>
+- This variable codes the source documents used to abstract the majority of information on the tumor being reported. This may not be the source of original case finding (for example, if a case is identified through a pathology laboratory report review and all source documents used to abstract the case are from the physician’s office, code this item 4).  
+
+- Rationale: The code in this field can be used to explain why information may be incomplete on a tumor. For example, death certificate only cases have unknown values for many data items, so one may want to exclude them from some analyses. The field also is used to monitor the success of non-hospital case reporting and follow-back mechanisms. All population-based registries should have some death certificate-only cases where no hospital admission was involved, but too high a percentage can imply both shortcomings in case-finding and that follow-back to uncover missed hospital reports was not complete.
+
+- Coding Instructions: Code in the following priority order: 1, 2, 8, 4, 3, 5, 6, 7. This is a change to reflect the addition of codes 2 and 8 and to prioritize laboratory reports over nursing home reports. The source facilities included in the previous code 1 (hospital inpatient and outpatient) are split between codes 1, 2, and 8.
+
+- This data item is intended to indicate the completeness of information available to the abstractor. Reports from health plans (e.g., Kaiser, Veterans Administration, military facilities) in which all diagnostic and treatment information is maintained centrally and is available to the abstractor are expected to be at least as complete as reports for hospital inpatients, which is why these sources are grouped with inpatients and given the code with the highest priority.
+
+- Sources coded with '2' usually have complete information on the cancer diagnosis, staging, and treatment.
+
+- Sources coded with '8' would include, but would not be limited to, outpatient surgery and nuclear medicine services. A physician's office that calls itself a surgery center should be coded as a physician's office. Surgery centers are equipped and staffed to perform surgical procedures under general anesthesia. If a physician's office calls itself a surgery center, but cannot perform surgical procedures under general anesthesia, code as a physician office.
+
+- Codes
+   + 1	Hospital inpatient; Managed health plans with comprehensive, unified medical records
+   + 2	Radiation Treatment Centers or Medical Oncology Centers (hospital-affiliated or independent)
+   + 3	Laboratory only (hospital-affiliated or independent)
+   + 4	Physician's office/private medical practitioner (LMD)
+   + 5	Nursing/convalescent home/hospice
+   + 6	Autopsy only
+   + 7	Death certificate only
+   + 8	Other hospital outpatient units/surgery centers
+   
+- Reference page: http://datadictionary.naaccr.org/default.aspx?c=10&Version=18#500
+
+<br>
+
+## All data
+```{r type of reporting source, message=FALSE}
+if("typeofreportingsource" %in% varName.list) {
+  typeofreportingsource <- as.factor(d[,"typeofreportingsource"])
+  levels(typeofreportingsource) <- list(Hospital.1="1",
+                                 Radiation_Tx.2="2",
+                                 Laboratory_Only.3="3",
+                                 Physician.4="4",
+                                 Nursing.5="5",
+                                 Autopsy.6="6",
+                                 Death_Certificate.7="7",
+                                 Other_Hospital.Unit.8="8")
+  new.d <- data.frame(new.d, typeofreportingsource)
+  new.d <- apply_labels(new.d, typeofreportingsource = "Source of Tumor Information")
+  
+  #summary(new.d$typeofreportingsource)
+}
+temp.d <- data.frame (new.d.1, typeofreportingsource)
+summarytools::view(dfSummary(new.d$typeofreportingsource, style = 'grid', max.distinct.values = 10, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE ), method = "render")
+```
+
+## LA County
+
+```{r repo source 1.LA County, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Los Angeles County.80"), ]
+typeofreportingsource<-as.data.frame(temp.dd$typeofreportingsource)
+names(typeofreportingsource)<-"type_of_reporting_source"
+summarytools::view(dfSummary(typeofreportingsource, style = 'grid', max.distinct.values = 100, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Northern CA
+
+```{r repo source 2.Northern CA, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Northern CA.30"), ]
+typeofreportingsource<-as.data.frame(temp.dd$typeofreportingsource)
+names(typeofreportingsource)<-"type_of_reporting_source"
+summarytools::view(dfSummary(typeofreportingsource, style = 'grid', max.distinct.values = 100, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE ), method = "render")
+rm(temp.dd)
+```
+
+## Greater CA
+
+```{r repo source 3.Greater CA, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Greater CA.10"), ]
+typeofreportingsource<-as.data.frame(temp.dd$typeofreportingsource)
+names(typeofreportingsource)<-"type_of_reporting_source"
+summarytools::view(dfSummary(typeofreportingsource, style = 'grid', max.distinct.values = 100, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE ), method = "render")
+rm(temp.dd)
+```
+
+## Detroit
+
+```{r repo source 4.Detroit, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Detroit.60"), ]
+typeofreportingsource<-as.data.frame(temp.dd$typeofreportingsource)
+names(typeofreportingsource)<-"type_of_reporting_source"
+summarytools::view(dfSummary(typeofreportingsource, style = 'grid', max.distinct.values = 100, plain.ascii = FALSE, valid.col = FALSE , headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Louisiana
+
+```{r repo source 5.Louisiana, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Louisiana.40"), ]
+typeofreportingsource<-as.data.frame(temp.dd$typeofreportingsource)
+names(typeofreportingsource)<-"type_of_reporting_source"
+summarytools::view(dfSummary(typeofreportingsource, style = 'grid', max.distinct.values = 100, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Georgia
+
+```{r repo source 6.Georgia, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Georgia.20"), ]
+typeofreportingsource<-as.data.frame(temp.dd$typeofreportingsource)
+names(typeofreportingsource)<-"type_of_reporting_source"
+summarytools::view(dfSummary(typeofreportingsource, style = 'grid', max.distinct.values = 100, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Michigan
+
+```{r repo source 7.Michigan, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Michigan.61"), ]
+typeofreportingsource<-as.data.frame(temp.dd$typeofreportingsource)
+names(typeofreportingsource)<-"type_of_reporting_source"
+summarytools::view(dfSummary(typeofreportingsource, style = 'grid', max.distinct.values = 100, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+<br>
+
+# PRIMARY PAYER AT DX {.tabset}
+<br>
+- Description: Primary payer/insurance carrier at the time of initial diagnosis and/or treatment at the reporting facility.
+
+- Rationale: This item is used in financial analysis and as an indicator for quality and outcome analyses.
+
+-Codes  
+   + 01	Not insured  
+   + 02	Not insured, self-pay  
+   + 10	Insurance, NOS  
+   + 20	Private Insurance: Managed care, HMO, or PPO  
+   + 21	Private Insurance: Fee-for-Service  
+   + 31	Medicaid  
+   + 35	Medicaid - Administered through a Managed Care plan  
+   + 60	Medicare/Medicare, NOS  
+   + 61	Medicare with supplement, NOS  
+   + 62	Medicare - Administered through a Managed Care plan  
+   + 63	Medicare with private supplement  
+   + 64	Medicare with Medicaid eligibility  
+   + 65	TRICARE  
+   + 66	Military  
+   + 67	Veterans Affairs  
+   + 68	Indian/Public Health Service  
+   + 99	Insurance status unknown
+
+- Reference page: http://datadictionary.naaccr.org/default.aspx?c=10&Version=18#630
+
+<br>
+
+## All data
+```{r primary payer at dx, message=FALSE}
+if("primarypayeratdx" %in% varName.list) {
+  primarypayeratdx <- as.factor(d[,"primarypayeratdx"])
+  levels(primarypayeratdx) <- list(Not_insured.1="1",
+                               Not_insured_self_pay.2="2",
+                               Insurance.10="10",
+                               Private_managed.20="20",
+                               Private_FFS.21="21", # fee-for-service
+                               Medicaid.31="31",
+                               Medicaid_managed_care.35="35",
+                               Medicare_medicare.60="60",
+                               Medicare_suppl.61="61",
+                               Medicare_managed_care.62="62",
+                               Medicare_private_suppl.63="63",
+                               Medicare_medicaid.64="64",
+                               TRICARE.65="65",
+                               Military.66="66",
+                               Veterans_Affairs.67="67",
+                               Indian_PHS.68="68",
+                               Unknown.99="99")
+    primarypayeratdx <- relevel(primarypayeratdx, ref="Private_managed.20")
+    new.d <- data.frame(new.d, primarypayeratdx)
+    new.d <- apply_labels(new.d, primarypayeratdx = "Primary payer/insurance at the time of diagnosis")
+    #summary(new.d$primarypayeratdx)
+}
+temp.d <- data.frame (new.d.1, primarypayeratdx)
+summarytools::view(dfSummary(new.d$primarypayeratdx, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+```
+
+## LA County
+
+```{r payer 1.LA County, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Los Angeles County.80"), ]
+primarypayeratdx<-as.data.frame(temp.dd$primarypayeratdx)
+names(primarypayeratdx)<-"primary_payer_at_dx"
+summarytools::view(dfSummary(primarypayeratdx, style = 'grid', max.distinct.values = 100, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Northern CA
+
+```{r payer 2.Northern CA, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Northern CA.30"), ]
+primarypayeratdx<-as.data.frame(temp.dd$primarypayeratdx)
+names(primarypayeratdx)<-"primary_payer_at_dx"
+summarytools::view(dfSummary(primarypayeratdx, style = 'grid', max.distinct.values = 100, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Greater CA
+
+```{r payer 3.Greater CA, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Greater CA.10"), ]
+primarypayeratdx<-as.data.frame(temp.dd$primarypayeratdx)
+names(primarypayeratdx)<-"primary_payer_at_dx"
+summarytools::view(dfSummary(primarypayeratdx, style = 'grid', max.distinct.values = 100, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Detroit
+
+```{r payer 4.Detroit, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Detroit.60"), ]
+primarypayeratdx<-as.data.frame(temp.dd$primarypayeratdx)
+names(primarypayeratdx)<-"primary_payer_at_dx"
+summarytools::view(dfSummary(primarypayeratdx, style = 'grid', max.distinct.values = 100, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Louisiana
+
+```{r payer 5.Louisiana, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Louisiana.40"), ]
+primarypayeratdx<-as.data.frame(temp.dd$primarypayeratdx)
+names(primarypayeratdx)<-"primary_payer_at_dx"
+summarytools::view(dfSummary(primarypayeratdx, style = 'grid', max.distinct.values = 100, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE ), method = "render")
+rm(temp.dd)
+```
+
+## Georgia
+
+```{r payer 6.Georgia, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Georgia.20"), ]
+primarypayeratdx<-as.data.frame(temp.dd$primarypayeratdx)
+names(primarypayeratdx)<-"primary_payer_at_dx"
+summarytools::view(dfSummary(primarypayeratdx, style = 'grid', max.distinct.values = 100, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Michigan
+
+```{r payer 7.Michigan, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Michigan.61"), ]
+primarypayeratdx<-as.data.frame(temp.dd$primarypayeratdx)
+names(primarypayeratdx)<-"primary_payer_at_dx"
+summarytools::view(dfSummary(primarypayeratdx, style = 'grid', max.distinct.values = 100, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+<br>
+
+# DERIVED SUMMARY STAGE 2018 {.tabset}
+<br>
+- Description: Derived Summary Stage 2018 is derived using the EOD data collection system (EOD Primary Tumor [772], EOD Regional Nodes [774] and EOD Mets [776]) algorithm. Other data items may be included in the derivation process. Effective for cases diagnosed 1/1/2018+.
+
+- Rationale: The SEER program has collected staging information on cases since its inception in 1973. Summary Stage groups cases into broad categories of in situ, local, regional, and distant. Summary Stage can be used to evaluate disease spread at diagnosis, treatment patterns and outcomes over time.
+ 
+- Derived Summary Stage 2018 [762] is only available at the central registry level.
+Note: This data item was included in Standards Volume II, Version 16; however, it was not implemented until 2018.
+
+- Codes  
+   + 0	In situ  
+   + 1	Localized  
+   + 2	Regional, direct extension only  
+   + 3	Regional, regional lymph nodes only  
+   + 4	Regional, direct extension and regional lymph nodes  
+   + 7	Distant  
+   + 8	Benign, borderline  
+   + 9	Unknown if extension or metastasis (unstaged, unknown, or unspecified)/Death certificate only case
+
+- Reference page: http://datadictionary.naaccr.org/default.aspx?c=10&Version=18#762
+
+<br>
+
+## All data
+```{r derived summary stage 2018, message=FALSE}
+if("derivedsummarystage2018" %in% varName.list) {
+  derivedsummarystage2018 <- as.factor(d[,"derivedsummarystage2018"])
+  levels(derivedsummarystage2018) <- list(In_situ.0="0",
+                                          Localized.1="1",
+                                          Regional_direct.2="2",
+                                          Regional_regional.3="3",
+                                          Regional_direct_regional.4="4",
+                                          Distant.7="7",
+                                          Benign_borderline.8="8",
+                                          Unknown.9="9")
+    derivedsummarystage2018 <- relevel(derivedsummarystage2018, ref="Localized.1")
+    new.d <- data.frame(new.d, derivedsummarystage2018)
+    new.d <- apply_labels(new.d, derivedsummarystage2018 = "Tumor Staging")
+    #summary(new.d$derivedsummarystage2018)
+}
+temp.d <- data.frame (new.d.1, derivedsummarystage2018)
+summarytools::view(dfSummary(new.d$derivedsummarystage2018, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+```
+
+## LA County
+
+```{r smry18 1.LA County, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Los Angeles County.80"), ]
+derivedsummarystage2018<-as.data.frame(temp.dd$derivedsummarystage2018)
+names(derivedsummarystage2018)<-"derived_summary_stage_2018"
+summarytools::view(dfSummary(derivedsummarystage2018, style = 'grid', max.distinct.values = 100, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Northern CA
+
+```{r smry18 2.Northern CA, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Northern CA.30"), ]
+derivedsummarystage2018<-as.data.frame(temp.dd$derivedsummarystage2018)
+names(derivedsummarystage2018)<-"derived_summary_stage_2018"
+summarytools::view(dfSummary(derivedsummarystage2018, style = 'grid', max.distinct.values = 100, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Greater CA
+
+```{r smry18 3.Greater CA, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Greater CA.10"), ]
+derivedsummarystage2018<-as.data.frame(temp.dd$derivedsummarystage2018)
+names(derivedsummarystage2018)<-"derived_summary_stage_2018"
+summarytools::view(dfSummary(derivedsummarystage2018, style = 'grid', max.distinct.values = 100, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Detroit
+
+```{r smry18 4.Detroit, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Detroit.60"), ]
+derivedsummarystage2018<-as.data.frame(temp.dd$derivedsummarystage2018)
+names(derivedsummarystage2018)<-"derived_summary_stage_2018"
+summarytools::view(dfSummary(derivedsummarystage2018, style = 'grid', max.distinct.values = 100, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Louisiana
+
+```{r smry18 5.Louisiana, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Louisiana.40"), ]
+derivedsummarystage2018<-as.data.frame(temp.dd$derivedsummarystage2018)
+names(derivedsummarystage2018)<-"derived_summary_stage_2018"
+summarytools::view(dfSummary(derivedsummarystage2018, style = 'grid', max.distinct.values = 100, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Georgia
+
+```{r smry18 6.Georgia, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Georgia.20"), ]
+derivedsummarystage2018<-as.data.frame(temp.dd$derivedsummarystage2018)
+names(derivedsummarystage2018)<-"derived_summary_stage_2018"
+summarytools::view(dfSummary(derivedsummarystage2018, style = 'grid', max.distinct.values = 100, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Michigan
+
+```{r smry18 7.Michigan, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Michigan.61"), ]
+derivedsummarystage2018<-as.data.frame(temp.dd$derivedsummarystage2018)
+names(derivedsummarystage2018)<-"derived_summary_stage_2018"
+summarytools::view(dfSummary(derivedsummarystage2018, style = 'grid', max.distinct.values = 100, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+<br>
+
+# DERIVED EOD 2018 STAGE GROUP {.tabset}
+<br>
+- Description: Derived EOD 2018 Stage Group is derived using the EOD data collection system (EOD Primary Tumor [772], EOD Regional Nodes [774] and EOD Mets [776]) algorithm. Other data items may be included in the derivation process. Effective for cases diagnosed 1/1/2018+.
+
+- Rationale: Derived EOD 2018 Stage Group can be used to evaluate disease spread at diagnosis, treatment patterns and outcomes over time.
+ 
+- Derived EOD 2018 Stage group is only available at the central registry level.
+
+- Codes: See the most current version of EOD (https://staging.seer.cancer.gov/) for rules and site-specific codes and coding structures.
+
+- Reference page: http://datadictionary.naaccr.org/default.aspx?c=10&Version=18#818
+
+<br>
+
+## All data
+```{r derived EOD stage group 2018, message=FALSE}
+if("derivedeod2018stagegroup" %in% varName.list) {
+  derivedeod2018stagegroup <- as.factor(trimws(d[,"derivedeod2018stagegroup"]))
+  # THIS CODING NEEDS TO BE CONFIRMED
+  levels(derivedeod2018stagegroup) <- list(T.1="1",
+                                          T.1B="1B",
+                                          T.2A="2A",
+                                          T.2B="2B",
+                                          T.2C="2C",
+                                          T.3="3",
+                                          T.3A="3A",
+                                          T.3B="3B",
+                                          T.3C="3C",
+                                          T.4="4",
+                                          T.4A="4A",
+                                          T.4B="4B",
+                                          Do_Not_Know.88="88",
+                                          Unknown.99="99")
+    derivedeod2018stagegroup <- relevel(derivedeod2018stagegroup, ref="T.1")
+    new.d <- data.frame(new.d, derivedeod2018stagegroup)
+    new.d <- apply_labels(new.d, derivedeod2018stagegroup = "Tumor Stage Group")
+    #summary(new.d$derivedeod2018stagegroup)
+}
+temp.d <- data.frame (new.d.1, derivedeod2018stagegroup)
+summarytools::view(dfSummary(new.d$derivedeod2018stagegroup, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+```
+
+## LA County
+
+```{r eod18 1.LA County, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Los Angeles County.80"), ]
+derivedeod2018stagegroup<-as.data.frame(temp.dd$derivedeod2018stagegroup)
+names(derivedeod2018stagegroup)<-"derived_eod_2018_stage_group"
+summarytools::view(dfSummary(derivedeod2018stagegroup, style = 'grid', max.distinct.values = 100, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Northern CA
+
+```{r eod18 2.Northern CA, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Northern CA.30"), ]
+derivedeod2018stagegroup<-as.data.frame(temp.dd$derivedeod2018stagegroup)
+names(derivedeod2018stagegroup)<-"derived_eod_2018_stage_group"
+summarytools::view(dfSummary(derivedeod2018stagegroup, style = 'grid', max.distinct.values = 100, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Greater CA
+
+```{r eod18 3.Greater CA, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Greater CA.10"), ]
+derivedeod2018stagegroup<-as.data.frame(temp.dd$derivedeod2018stagegroup)
+names(derivedeod2018stagegroup)<-"derived_eod_2018_stage_group"
+summarytools::view(dfSummary(derivedeod2018stagegroup, style = 'grid', max.distinct.values = 100, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Detroit
+
+```{r eod18 4.Detroit, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Detroit.60"), ]
+derivedeod2018stagegroup<-as.data.frame(temp.dd$derivedeod2018stagegroup)
+names(derivedeod2018stagegroup)<-"derived_eod_2018_stage_group"
+summarytools::view(dfSummary(derivedeod2018stagegroup, style = 'grid', max.distinct.values = 100, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Louisiana
+
+```{r eod18 5.Louisiana, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Louisiana.40"), ]
+derivedeod2018stagegroup<-as.data.frame(temp.dd$derivedeod2018stagegroup)
+names(derivedeod2018stagegroup)<-"derived_eod_2018_stage_group"
+summarytools::view(dfSummary(derivedeod2018stagegroup, style = 'grid', max.distinct.values = 100, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Georgia
+
+```{r eod18 6.Georgia, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Georgia.20"), ]
+derivedeod2018stagegroup<-as.data.frame(temp.dd$derivedeod2018stagegroup)
+names(derivedeod2018stagegroup)<-"derived_eod_2018_stage_group"
+summarytools::view(dfSummary(derivedeod2018stagegroup, style = 'grid', max.distinct.values = 100, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Michigan
+
+```{r eod18 7.Michigan, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Michigan.61"), ]
+derivedeod2018stagegroup<-as.data.frame(temp.dd$derivedeod2018stagegroup)
+names(derivedeod2018stagegroup)<-"derived_eod_2018_stage_group"
+summarytools::view(dfSummary(derivedeod2018stagegroup, style = 'grid', max.distinct.values = 100, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+<br>
+
+# RX SUMM--TREATMENT STATUS {.tabset}
+
+<br>
+
+- Description: This data item is a summary of the status for all treatment modalities. It is used in conjunction with Date Initial RX SEER [1260] and/or Date 1st Crs RX CoC [1270] and each modality of treatment with their respective date field to document whether treatment was given or not given, whether it is unknown if treatment was given, or whether treatment was given on an unknown date. Also indicates active surveillance (watchful waiting). This data item is effective for January 2010+ diagnoses.
+
+- Rationale: This field will document active surveillance (watchful waiting) and eliminate searching each treatment modality to determine whether treatment was given.
+
+- Codes
+   + 0	No treatment given
+   + 1	Treatment given
+   + 2	Active surveillance (watchful waiting)
+   + 9	Unknown if treatment was given
+
+- Reference page: http://datadictionary.naaccr.org/default.aspx?c=10&Version=18#1285
+
+<br>
+
+## All data
+```{r RX SUMM-treatment status, message=FALSE, results='asis'}
+st_css() #IMPORTANT!
+if("rxsummtreatmentstatus" %in% varName.list) {
+  rxsummtreatmentstatus <- as.factor(trimws(d[,"rxsummtreatmentstatus"]))
+  levels(rxsummtreatmentstatus) <- list(	No_treatment_given.0="0",
+                                          Treatment_given.1="1",
+                                          Active.2="2",
+                                          Unknown.9="9"
+                                          )
+    rxsummtreatmentstatus <- relevel(rxsummtreatmentstatus, ref="Treatment_given.1")
+    new.d <- data.frame(new.d, rxsummtreatmentstatus)
+    new.d <- apply_labels(new.d, rxsummtreatmentstatus = "Status for all treatment modalities")
+    #summary(new.d$rxsummtreatmentstatus)
+}
+temp.d <- data.frame (new.d.1, rxsummtreatmentstatus)
+summarytools::view(dfSummary(new.d$rxsummtreatmentstatus, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+```
+
+## LA County
+
+```{r  RX SUMM-treatment status 1.LA County, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Los Angeles County.80"), ]
+rxsummtreatmentstatus<-as.data.frame(temp.dd$rxsummtreatmentstatus)
+names(rxsummtreatmentstatus)<-"rx_summ_treatment_status"
+summarytools::view(dfSummary(rxsummtreatmentstatus, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Northern CA
+
+```{r  RX SUMM-treatment status 2.Northern CA, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Northern CA.30"), ]
+rxsummtreatmentstatus<-as.data.frame(temp.dd$rxsummtreatmentstatus)
+names(rxsummtreatmentstatus)<-"rx_summ_treatment_status"
+summarytools::view(dfSummary(rxsummtreatmentstatus, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Greater CA
+
+```{r  RX SUMM-treatment status 3.Greater CA, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Greater CA.10"), ]
+rxsummtreatmentstatus<-as.data.frame(temp.dd$rxsummtreatmentstatus)
+names(rxsummtreatmentstatus)<-"rx_summ_treatment_status"
+summarytools::view(dfSummary(rxsummtreatmentstatus, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Detroit
+
+```{r  RX SUMM-treatment status 4.Detroit, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Detroit.60"), ]
+rxsummtreatmentstatus<-as.data.frame(temp.dd$rxsummtreatmentstatus)
+names(rxsummtreatmentstatus)<-"rx_summ_treatment_status"
+summarytools::view(dfSummary(rxsummtreatmentstatus, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Louisiana
+
+```{r  RX SUMM-treatment status 5.Louisiana, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Louisiana.40"), ]
+rxsummtreatmentstatus<-as.data.frame(temp.dd$rxsummtreatmentstatus)
+names(rxsummtreatmentstatus)<-"rx_summ_treatment_status"
+summarytools::view(dfSummary(rxsummtreatmentstatus, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Georgia
+
+```{r  RX SUMM-treatment status 6.Georgia, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Georgia.20"), ]
+rxsummtreatmentstatus<-as.data.frame(temp.dd$rxsummtreatmentstatus)
+names(rxsummtreatmentstatus)<-"rx_summ_treatment_status"
+summarytools::view(dfSummary(rxsummtreatmentstatus, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Michigan
+
+```{r  RX SUMM-treatment status 7.Michigan, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Michigan.61"), ]
+rxsummtreatmentstatus<-as.data.frame(temp.dd$rxsummtreatmentstatus)
+names(rxsummtreatmentstatus)<-"rx_summ_treatment_status"
+summarytools::view(dfSummary(rxsummtreatmentstatus, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+<br>
+
+# RX SUMM--SURG PRIM SITE {.tabset}
+
+<br>
+
+- Description: Site-specific codes for the type of surgery to the primary site performed as part of the first course of treatment. This includes treatment given at all facilities as part of the first course of treatment.
+
+- Codes: (in addition to the site-specific codes; Refer to the most recent version of STORE and SEER Program Code manual for additional instructions.)
+   + 00	None
+   + 10-19	Site-specific code; tumor destruction
+   + 20-80	Site-specific codes; resection
+   + 90	Surgery, NOS
+   + 98	Site specific codes; special
+   + 99	Unknown
+   
+- Reference: http://datadictionary.naaccr.org/default.aspx?c=10&Version=18#1290
+
+<br>
+
+## All data
+```{r RX SUMM-SURG PRIM SITE, message=FALSE, results='asis'}
+st_css() #IMPORTANT!
+if("rxsummsurgprimsite" %in% varName.list) {
+  # Put 10-19 into one catecory and 20-80 into one category
+  a<-as.numeric(d$rxsummsurgprimsite)
+  a[which(a>=10&a<=19)]<-10
+  a[which(a>=20&a<=80)]<-20
+  rxsummsurgprimsite <- as.factor(a)
+  levels(rxsummsurgprimsite) <- list(None.0="0",
+                                  Tumor_destruction.10="10",
+                                  Resection.20="20",
+                                  Surgery_NOS.90="90",
+                                  Unknown.99="99"
+                                  )
+    new.d <- data.frame(new.d, rxsummsurgprimsite)
+    new.d <- apply_labels(new.d, rxsummsurgprimsite = "Type of radiation therapy")
+    #summary(new.d$rxsummsurgprimsite)
+}
+temp.d <- data.frame (new.d.1, rxsummsurgprimsite)
+summarytools::view(dfSummary(new.d$rxsummsurgprimsite, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+```
+
+## LA County
+
+```{r  RX SUMM-SURG PRIM SITE 1.LA County,echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Los Angeles County.80"), ]
+rxsummsurgprimsite<-as.data.frame(temp.dd$rxsummsurgprimsite)
+names(rxsummsurgprimsite)<-"rx_summ_surg_prim_site"
+summarytools::view(dfSummary(rxsummsurgprimsite, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE ), method = "render")
+rm(temp.dd)
+```
+
+## Northern CA
+
+```{r  RX SUMM-SURG PRIM SITE 2.Northern CA,echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Northern CA.30"), ]
+rxsummsurgprimsite<-as.data.frame(temp.dd$rxsummsurgprimsite)
+names(rxsummsurgprimsite)<-"rx_summ_surg_prim_site"
+summarytools::view(dfSummary(rxsummsurgprimsite, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE ), method = "render")
+rm(temp.dd)
+```
+
+## Greater CA
+
+```{r  RX SUMM-SURG PRIM SITE 3.Greater CA,echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Greater CA.10"), ]
+rxsummsurgprimsite<-as.data.frame(temp.dd$rxsummsurgprimsite)
+names(rxsummsurgprimsite)<-"rx_summ_surg_prim_site"
+summarytools::view(dfSummary(rxsummsurgprimsite, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE , headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Detroit
+
+```{r  RX SUMM-SURG PRIM SITE 4.Detroit,echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Detroit.60"), ]
+rxsummsurgprimsite<-as.data.frame(temp.dd$rxsummsurgprimsite)
+names(rxsummsurgprimsite)<-"rx_summ_surg_prim_site"
+summarytools::view(dfSummary(rxsummsurgprimsite, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE , headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Louisiana
+
+```{r  RX SUMM-SURG PRIM SITE 5.Louisiana,echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Louisiana.40"), ]
+rxsummsurgprimsite<-as.data.frame(temp.dd$rxsummsurgprimsite)
+names(rxsummsurgprimsite)<-"rx_summ_surg_prim_site"
+summarytools::view(dfSummary(rxsummsurgprimsite, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE ), method = "render")
+rm(temp.dd)
+```
+
+## Georgia
+
+```{r  RX SUMM-SURG PRIM SITE 6.Georgia,echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Georgia.20"), ]
+rxsummsurgprimsite<-as.data.frame(temp.dd$rxsummsurgprimsite)
+names(rxsummsurgprimsite)<-"rx_summ_surg_prim_site"
+summarytools::view(dfSummary(rxsummsurgprimsite, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE ), method = "render")
+rm(temp.dd)
+```
+
+## Michigan
+
+```{r  RX SUMM-SURG PRIM SITE 7.Michigan,echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Michigan.61"), ]
+rxsummsurgprimsite<-as.data.frame(temp.dd$rxsummsurgprimsite)
+names(rxsummsurgprimsite)<-"rx_summ_surg_prim_site"
+summarytools::view(dfSummary(rxsummsurgprimsite, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE ), method = "render")
+rm(temp.dd)
+```
+
+<br>
+
+# RX SUMM--RADIATION  {.tabset}
+<br>
+- Description: Codes for the type of radiation therapy performed as part of the first course of treatment.
+Note: Radiation to brain and central nervous system for leukemia and lung cases is coded as radiation in this field.
+
+- Codes
+   + 0	None
+   + 1	Beam radiation
+   + 2	Radioactive implants
+   + 3	Radioisotopes
+   + 4	Combination of 1 with 2 or 3
+   + 5	Radiation, NOS-method or source not specified
+   + 6	Currently allowable for historic cases only; see note below
+   + 7	Patient or patient's guardian refused*
+   + 8	Radiation recommended, unknown if administered*
+   + 9	Unknown if radiation administered
+   
+- Note: CoC discontinued collection of this item in 2003 when FORDS was implemented. For CoC, codes 7 and 8 were used for tumors diagnosed before 1996, but should have been converted to 0 in this field and to the appropriate code in the new field Reason for No Radiation [1430]. SEER continues to use codes 7 and 8 for all years. See Chapter V, Unresolved Issues, for further discussion.
+
+- In the SEER program, a code 2 for other radiation was used between 1973 and 1987. When the radiation codes were expanded to add codes ‘2’ radioactive implants and ‘3’ radioisotopes, all cases with a code ‘2’ and diagnosed in 1973-1987 were converted to a code ‘6’ radiation other than beam radiation.
+
+- Reference: http://datadictionary.naaccr.org/default.aspx?c=10&Version=18#1360
+
+<br>
+
+## All data
+```{r RX SUMM-radiation, message=FALSE, results='asis'}
+st_css() #IMPORTANT!
+if("rxsummradiation" %in% varName.list) {
+  rxsummradiation <- as.factor(trimws(d[,"rxsummradiation"]))
+  levels(rxsummradiation) <- list(None.0="0",
+                                  Beam_radiation.1="1",
+                                  Radioactive_implants.2="2",
+                                  Radioisotopes.3="3",
+                                  Combination_12_or_13.4="4",
+                                  NOS_or_source_not_specified.5="5",
+                                  Historic_cases_only.6="6",
+                                  Refused.7="7",
+                                  Radiation_recommended_unknown.8="8",
+                                  Unknown.9 = "9")
+    new.d <- data.frame(new.d, rxsummradiation)
+    new.d <- apply_labels(new.d, rxsummradiation = "Type of radiation therapy")
+    #summary(new.d$rxsummradiation)
+}
+temp.d <- data.frame (new.d.1, rxsummradiation)
+summarytools::view(dfSummary(new.d$rxsummradiation, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE ), method = "render")
+```
+
+## LA County
+
+```{r  RX SUMM-radiation 1.LA County,echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Los Angeles County.80"), ]
+rxsummradiation<-as.data.frame(temp.dd$rxsummradiation)
+names(rxsummradiation)<-"rx_summ_radiation"
+summarytools::view(dfSummary(rxsummradiation, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Northern CA
+
+```{r  RX SUMM-radiation 2.Northern CA,echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Northern CA.30"), ]
+rxsummradiation<-as.data.frame(temp.dd$rxsummradiation)
+names(rxsummradiation)<-"rx_summ_radiation"
+summarytools::view(dfSummary(rxsummradiation, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE , headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Greater CA
+
+```{r  RX SUMM-radiation 3.Greater CA,echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Greater CA.10"), ]
+rxsummradiation<-as.data.frame(temp.dd$rxsummradiation)
+names(rxsummradiation)<-"rx_summ_radiation"
+summarytools::view(dfSummary(rxsummradiation, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE ), method = "render")
+rm(temp.dd)
+```
+
+## Detroit
+
+```{r  RX SUMM-radiation 4.Detroit,echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Detroit.60"), ]
+rxsummradiation<-as.data.frame(temp.dd$rxsummradiation)
+names(rxsummradiation)<-"rx_summ_radiation"
+summarytools::view(dfSummary(rxsummradiation, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Louisiana
+
+```{r  RX SUMM-radiation 5.Louisiana,echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Louisiana.40"), ]
+rxsummradiation<-as.data.frame(temp.dd$rxsummradiation)
+names(rxsummradiation)<-"rx_summ_radiation"
+summarytools::view(dfSummary(rxsummradiation, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE , headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Georgia
+
+```{r  RX SUMM-radiation 6.Georgia,echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Georgia.20"), ]
+rxsummradiation<-as.data.frame(temp.dd$rxsummradiation)
+names(rxsummradiation)<-"rx_summ_radiation"
+summarytools::view(dfSummary(rxsummradiation, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE ), method = "render")
+rm(temp.dd)
+```
+
+## Michigan
+
+```{r  RX SUMM-radiation 7.Michigan,echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Michigan.61"), ]
+rxsummradiation<-as.data.frame(temp.dd$rxsummradiation)
+names(rxsummradiation)<-"rx_summ_radiation"
+summarytools::view(dfSummary(rxsummradiation, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE ), method = "render")
+rm(temp.dd)
+```
+
+<br>
+
+# RX SUMM--CHEMO  {.tabset}
+<br>
+
+- Description: Codes for chemotherapy given as part of the first course of treatment or the reason chemotherapy was not given. Includes treatment given at all facilities as part of the first course.
+Note: Prior to 2013, targeted therapies that invoke an immune response, such as Herceptin, had been coded as chemotherapy. Effective with cases diagnosed January 1, 2013, and forward these therapies are classified as biological response modifiers. Coding instructions for these changes have been added to the remarks field for the applicable drugs in the SEER*RX Interactive Drug Database ( http://seer.cancer.gov/tools/seerrx/).
+
+- Codes (Refer to the most recent version of STORE for additional instructions.)
+   + 00	None, chemotherapy was not part of the planned first course of therapy.
+   + 01	Chemotherapy, NOS.
+   + 02	Chemotherapy, single agent.
+   + 03	Chemotherapy, multiple agents.
+   + 82	Chemotherapy was not recommended/administered because it was contraindicated due to patient risk factors (i.e., comorbid conditions, advanced age).
+   + 85	Chemotherapy was not administered because the patient died prior to planned or recommended therapy.
+   + 86	Chemotherapy was not administered. It was recommended by the patient's physician, but was not administered as part of first-course therapy. No reason was stated in the patient record.
+   + 87	Chemotherapy was not administered; it was recommended by the patient's physician, but this treatment was refused by the patient, the patient's family member, or the patient's guardian. The refusal was noted in the patient record.
+   + 88	Chemotherapy was recommended, but it is unknown if it was administered.
+   + 99	It is unknown whether a chemotherapeutic agent(s) was recommended or administered because it is not stated in patient record; death certificate-only cases.
+
+- Reference: http://datadictionary.naaccr.org/default.aspx?c=10&Version=18#1390
+
+<br>
+
+## All data
+```{r RX SUMM-chemo, message=FALSE, results='asis'}
+st_css() #IMPORTANT!
+if("rxsummchemo" %in% varName.list) {
+  rxsummchemo <- as.factor(trimws(d[,"rxsummchemo"]))
+  levels(rxsummchemo) <- list(None.0="0",
+                                  Chemo_NOS.1="1",
+                                  Chemo_single_agent.2="2",
+                                  Chemo_multiple_agents.3="3",
+                                  Not_recom_contraindicated.82="82",
+                                  Not_admin_first_course_trp.86="86",
+                                  Not_admin_refused.87="87",
+                                  Unknown_if_administered.88="88",
+                                  unknown.99="99")
+    new.d <- data.frame(new.d, rxsummchemo)
+    new.d <- apply_labels(new.d, rxsummchemo = "Chemotherapy as part of the first course of treatment")
+    #summary(new.d$rxsummchemo)
+}
+temp.d <- data.frame (new.d.1, rxsummchemo)
+summarytools::view(dfSummary(new.d$rxsummchemo, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE ), method = "render")
+```
+
+## LA County
+
+```{r  RX SUMM-chemo 1.LA County,echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Los Angeles County.80"), ]
+rxsummchemo<-as.data.frame(temp.dd$rxsummchemo)
+names(rxsummchemo)<-"rx_summ_chemo"
+summarytools::view(dfSummary(rxsummchemo, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Northern CA
+
+```{r  RX SUMM-chemo 2.Northern CA,echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Northern CA.30"), ]
+rxsummchemo<-as.data.frame(temp.dd$rxsummchemo)
+names(rxsummchemo)<-"rx_summ_chemo"
+summarytools::view(dfSummary(rxsummchemo, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE ), method = "render")
+rm(temp.dd)
+```
+
+## Greater CA
+
+```{r  RX SUMM-chemo 3.Greater CA,echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Greater CA.10"), ]
+rxsummchemo<-as.data.frame(temp.dd$rxsummchemo)
+names(rxsummchemo)<-"rx_summ_chemo"
+summarytools::view(dfSummary(rxsummchemo, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE ), method = "render")
+rm(temp.dd)
+```
+
+## Detroit
+
+```{r  RX SUMM-chemo 4.Detroit,echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Detroit.60"), ]
+rxsummchemo<-as.data.frame(temp.dd$rxsummchemo)
+names(rxsummchemo)<-"rx_summ_chemo"
+summarytools::view(dfSummary(rxsummchemo, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE ), method = "render")
+rm(temp.dd)
+```
+
+## Louisiana
+
+```{r  RX SUMM-chemo 5.Louisiana,echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Louisiana.40"), ]
+rxsummchemo<-as.data.frame(temp.dd$rxsummchemo)
+names(rxsummchemo)<-"rx_summ_chemo"
+summarytools::view(dfSummary(rxsummchemo, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE ), method = "render")
+rm(temp.dd)
+```
+
+## Georgia
+
+```{r  RX SUMM-chemo 6.Georgia,echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Georgia.20"), ]
+rxsummchemo<-as.data.frame(temp.dd$rxsummchemo)
+names(rxsummchemo)<-"rx_summ_chemo"
+summarytools::view(dfSummary(rxsummchemo, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE , headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Michigan
+
+```{r  RX SUMM-chemo 7.Michigan,echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Michigan.61"), ]
+rxsummchemo<-as.data.frame(temp.dd$rxsummchemo)
+names(rxsummchemo)<-"rx_summ_chemo"
+summarytools::view(dfSummary(rxsummchemo, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+<br>
+
+# RX SUMM--HORMONE  {.tabset}
+<br>
+
+- Description: Records whether systemic hormonal agents were administered as first-course treatment at any facility, or the reason they were not given. Hormone therapy consists of a group of drugs that may affect the long-term control of a cancer’s growth. It is not usually used as a curative measure.
+
+- Rationale: Systemic therapy may involve the administration of one or a combination of agents. This data item allows for the evaluation of the administration of hormonal agents as part of the first course of therapy.
+
+- Codes (Refer to the most recent version of STORE and the SEER Program Code Manual for additional instructions.)
+   + 00	None, hormone therapy was not part of the planned first course of therapy.
+   + 01	Hormone therapy administered as first course therapy.
+   + 82	Hormone therapy was not recommended/administered because it was contraindicated due to patient risk factors (i.e., comorbid conditions, advanced age).
+   + 85	Hormone therapy was not administered because the patient died prior to planned or recommended therapy.
+   + 86	Hormone therapy was not administered. It was recommended by the patient's physician, but was not administered as part of first-course therapy. No reason was stated in the patient record.
+   + 87	Hormone therapy was not administered. It was recommended by the patient's physician, but this treatment was refused by the patient, the patient's family member, or the patient's guardian. The refusal was noted in the patient record.
+   + 88	Hormone therapy was recommended, but it is unknown if it was administered.
+   + 99	It is unknown whether a hormonal agent(s) was recommended or administered because it is not stated in the patient record. Death certificate-only cases.
+
+- Note: For tumors diagnosed on or after January 1, 2003, information on endocrine surgery and/or endocrine radiation should be coded in the new field, RX Summ--Transplnt/Endocr [3250]. The CoC standards for hospitals do not allow use of codes 02-03 in tumors diagnosed on or after January 1, 2003.
+
+- Reference: http://datadictionary.naaccr.org/default.aspx?c=10&Version=18#1400
+
+<br>
+
+## All data
+```{r RX SUMM-hormone, message=FALSE, results='asis'}
+st_css() #IMPORTANT!
+if("rxsummhormone" %in% varName.list) {
+  rxsummhormone <- as.factor(trimws(d[,"rxsummhormone"]))
+  levels(rxsummhormone) <- list(None.0="0",
+                              HT_first_course.1="1",
+                              Not_recom_contraindicated.82="82",
+                              Not_admin_died.85="85",
+                              Recom_not_admin.86="86",
+                              Recomm_but_refused.87="87",
+                              Unknown_if_admin.88="88",
+                              Unknown.99="99")
+    new.d <- data.frame(new.d, rxsummhormone)
+    new.d <- apply_labels(new.d, rxsummhormone = "Hormonal agents as part of the first course of treatment")
+    #summary(new.d$rxsummhormone)
+}
+temp.d <- data.frame (new.d.1, rxsummhormone)
+summarytools::view(dfSummary(new.d$rxsummhormone, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+```
+
+## LA County
+
+```{r  RX SUMM-hormone 1.LA County, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Los Angeles County.80"), ]
+rxsummhormone<-as.data.frame(temp.dd$rxsummhormone)
+names(rxsummhormone)<-"rx_summ_hormone"
+summarytools::view(dfSummary(rxsummhormone, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Northern CA
+
+```{r  RX SUMM-hormone 2.Northern CA, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Northern CA.30"), ]
+rxsummhormone<-as.data.frame(temp.dd$rxsummhormone)
+names(rxsummhormone)<-"rx_summ_hormone"
+summarytools::view(dfSummary(rxsummhormone, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Greater CA
+
+```{r  RX SUMM-hormone 3.Greater CA, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Greater CA.10"), ]
+rxsummhormone<-as.data.frame(temp.dd$rxsummhormone)
+names(rxsummhormone)<-"rx_summ_hormone"
+summarytools::view(dfSummary(rxsummhormone, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Detroit
+
+```{r  RX SUMM-hormone 4.Detroit, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Detroit.60"), ]
+rxsummhormone<-as.data.frame(temp.dd$rxsummhormone)
+names(rxsummhormone)<-"rx_summ_hormone"
+summarytools::view(dfSummary(rxsummhormone, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Louisiana
+
+```{r  RX SUMM-hormone 5.Louisiana, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Louisiana.40"), ]
+rxsummhormone<-as.data.frame(temp.dd$rxsummhormone)
+names(rxsummhormone)<-"rx_summ_hormone"
+summarytools::view(dfSummary(rxsummhormone, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Georgia
+
+```{r  RX SUMM-hormone 6.Georgia, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Georgia.20"), ]
+rxsummhormone<-as.data.frame(temp.dd$rxsummhormone)
+names(rxsummhormone)<-"rx_summ_hormone"
+summarytools::view(dfSummary(rxsummhormone, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Michigan
+
+```{r  RX SUMM-hormone 7.Michigan, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Michigan.61"), ]
+rxsummhormone<-as.data.frame(temp.dd$rxsummhormone)
+names(rxsummhormone)<-"rx_summ_hormone"
+summarytools::view(dfSummary(rxsummhormone, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+<br>
+
+# VITAL STATUS {.tabset}
+<br>
+
+- Description: Vital status of the patient as of the date entered in Date of Last Contact [1750]. If the patient has multiple tumors, vital status should be the same for all tumors.
+
+- Codes
+   + 0	Dead
+   + 1	Alive
+   
+- Reference: http://datadictionary.naaccr.org/default.aspx?c=10&Version=18#1760
+
+<br>
+
+## All data
+```{r vital status, message=FALSE, results='asis'}
+st_css() #IMPORTANT!
+if("vitalstatus" %in% varName.list) {
+  vitalstatus <- as.factor(trimws(d[,"vitalstatus"]))
+  levels(vitalstatus) <- list(Dead.0="0",
+                              Alive.1="1")
+    new.d <- data.frame(new.d, vitalstatus)
+    new.d <- apply_labels(new.d, vitalstatus = "Vital status of the patient")
+    #summary(new.d$vitalstatus)
+}
+temp.d <- data.frame (new.d.1, vitalstatus)
+summarytools::view(dfSummary(new.d$vitalstatus, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+```
+
+## LA County
+
+```{r vital status 1.LA County, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Los Angeles County.80"), ]
+vitalstatus<-as.data.frame(temp.dd$vitalstatus)
+names(vitalstatus)<-"vital_status"
+summarytools::view(dfSummary(vitalstatus, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE , headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Northern CA
+
+```{r vital status 2.Northern CA, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Northern CA.30"), ]
+vitalstatus<-as.data.frame(temp.dd$vitalstatus)
+names(vitalstatus)<-"vital_status"
+summarytools::view(dfSummary(vitalstatus, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE ), method = "render")
+rm(temp.dd)
+```
+
+## Greater CA
+
+```{r vital status 3.Greater CA, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Greater CA.10"), ]
+vitalstatus<-as.data.frame(temp.dd$vitalstatus)
+names(vitalstatus)<-"vital_status"
+summarytools::view(dfSummary(vitalstatus, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE , headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Detroit
+
+```{r vital status 4.Detroit, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Detroit.60"), ]
+vitalstatus<-as.data.frame(temp.dd$vitalstatus)
+names(vitalstatus)<-"vital_status"
+summarytools::view(dfSummary(vitalstatus, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Louisiana
+
+```{r vital status 5.Louisiana, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Louisiana.40"), ]
+vitalstatus<-as.data.frame(temp.dd$vitalstatus)
+names(vitalstatus)<-"vital_status"
+summarytools::view(dfSummary(vitalstatus, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Georgia
+
+```{r vital status 6.Georgia, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Georgia.20"), ]
+vitalstatus<-as.data.frame(temp.dd$vitalstatus)
+names(vitalstatus)<-"vital_status"
+summarytools::view(dfSummary(vitalstatus, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Michigan
+
+```{r vital status 7.Michigan, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Michigan.61"), ]
+vitalstatus<-as.data.frame(temp.dd$vitalstatus)
+names(vitalstatus)<-"vital_status"
+summarytools::view(dfSummary(vitalstatus, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+<br>
+
+# DERIVED SS2000 {.tabset}
+<br>
+
+- Description: This item is the derived “SEER Summary Stage 2000” from the CS algorithm (or EOD codes) effective with 2004 diagnosis.
+
+- Rationale: The Collaborative Stage Data Collection System was designed by a joint task force including representatives from SEER, ACoS, CDC, NAACCR, NCRA, CCCR, CPAC, and AJCC, to provide a single uniform set of codes and rules for coding extent of disease (EOD) and stage information to meet the needs of all of the participating standard setters. When CS data items are coded, a computer algorithm provides the derivation of T, N, M, and stage-based on AJCC Cancer Staging Manual 6th & 7th Editions, SEER Summary Stage 1977, and SEER Summary Stage 2000. There are separate derived CS fields in the NAACCR record based on AJCC 6th Edition for 2004+ cases and AJCC 7th Edition for 2010+ cases.
+
+- Codes (See the most current version of the Collaborative Stage Data Collection System (https://cancerstaging.org/cstage/Pages/default.aspx),13 for rules and site-specific codes and coding structures.)
+
+- Reference: http://datadictionary.naaccr.org/default.aspx?c=10&Version=18#3020
+
+<br>
+
+## All data
+```{r derived summary stage 2000, message=FALSE, results='asis'}
+st_css() #IMPORTANT!
+if("derivedss2000" %in% varName.list) {
+  derivedss2000 <- as.factor(d[,"derivedss2000"])
+  levels(derivedss2000) <- list(In_situ.0="0",
+                                          Localized.1="1",
+                                          Direct_extension.2="2",
+                                          Lymph_nodes_only.3="3",
+                                          Extension_nodes.4="4",
+                                          Distant.7="7",
+                                          Unknown.9="9")
+    derivedss2000 <- relevel(derivedss2000, ref="Localized.1")
+    new.d <- data.frame(new.d, derivedss2000)
+    new.d <- apply_labels(new.d, derivedss2000 = "Tumor Staging")
+    #summary(new.d$derivedss2000)
+}
+temp.d <- data.frame (new.d.1, derivedss2000)
+summarytools::view(dfSummary(new.d$derivedss2000, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE ), method = "render")
+```
+
+## LA County
+
+```{r derived summary stage 2000 1.LA County, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Los Angeles County.80"), ]
+derivedss2000<-as.data.frame(temp.dd$derivedss2000)
+names(derivedss2000)<-"derived_ss_2000"
+summarytools::view(dfSummary(derivedss2000, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE , headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Northern CA
+
+```{r derived summary stage 2000 2.Northern CA, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Northern CA.30"), ]
+derivedss2000<-as.data.frame(temp.dd$derivedss2000)
+names(derivedss2000)<-"derived_ss_2000"
+summarytools::view(dfSummary(derivedss2000, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE , headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Greater CA
+
+```{r derived summary stage 2000 3.Greater CA, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Greater CA.10"), ]
+derivedss2000<-as.data.frame(temp.dd$derivedss2000)
+names(derivedss2000)<-"derived_ss_2000"
+summarytools::view(dfSummary(derivedss2000, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE , headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Detroit
+
+```{r derived summary stage 2000 4.Detroit, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Detroit.60"), ]
+derivedss2000<-as.data.frame(temp.dd$derivedss2000)
+names(derivedss2000)<-"derived_ss_2000"
+summarytools::view(dfSummary(derivedss2000, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE , headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Louisiana
+
+```{r derived summary stage 2000 5.Louisiana, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Louisiana.40"), ]
+derivedss2000<-as.data.frame(temp.dd$derivedss2000)
+names(derivedss2000)<-"derived_ss_2000"
+summarytools::view(dfSummary(derivedss2000, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE , headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Georgia
+
+```{r derived summary stage 2000 6.Georgia, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Georgia.20"), ]
+derivedss2000<-as.data.frame(temp.dd$derivedss2000)
+names(derivedss2000)<-"derived_ss_2000"
+summarytools::view(dfSummary(derivedss2000, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE , headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Michigan
+
+```{r derived summary stage 2000 7.Michigan, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Michigan.61"), ]
+derivedss2000<-as.data.frame(temp.dd$derivedss2000)
+names(derivedss2000)<-"derived_ss_2000"
+summarytools::view(dfSummary(derivedss2000, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+<br>
+
+# DERIVED SEER CMB STG GRP {.tabset}
+<br>
+
+- Description: This data item is needed to store the results of the derived algorithmic calculation of SEER Combined Stage Group.
+
+- Rationale: Rationale for change proposal (potential benefits of change): The SEER Program is developing an algorithm to calculate clinical and pathologic stage group based on their T, N, and M components and additional information as needed to calculate stage. For example, for thyroid, additional information is needed on histology and age to calculate stage. Once the T, N, and M are known an algorithm can assign the stage group instead of a registrar having to look up the stage. There are also provisions for a separate field for directly assigned stage group if the registrar prefers entering it.
+
+- Codes
+   + 0A	Stage 0
+   + 0IS	Stage 0is
+   + 1	Stage I
+   + 1A	Stage IA
+   + 1A2	Stage IA2
+   + 1B	Stage IB
+   + 1B1	Stage IB1
+   + 1B2	Stage IB2
+   + 1C	Stage IC
+   + 1S	Stage IS
+   + 2	Stage 2
+   + 2A	Stage 2A
+   + 2A1	Stage
+   + 2A2	Stage IIA2
+   + 2B	Stage IIB
+   + 2C	Stage IIC
+   + 3	Stage III
+   + 3A	Stage IIIA
+   + 3B	Stage IIIB
+   + 3C	Stage IIIC
+   + 3C1	Stage IIIC1
+   + 3C2	Stage IIIC2
+   + 4	Stage IV
+   + 4A	Stage IVA
+   + 4A1	Stage IVA1
+   + 4A2	Stage IV42
+   + 4B	Stage IVB
+   + 4C	Stage IV4C
+   + OC	Occult
+   + 88	Not applicable
+   + 99	Unknown
+   + Blank	The algorithm has not been run
+
+- Reference: http://datadictionary.naaccr.org/default.aspx?c=10&Version=18#3614
+
+<br>
+
+## All data
+```{r DERIVED SEER CMB STG GRP, message=FALSE, results='asis'}
+st_css() #IMPORTANT!
+if("derivedseercmbstggrp" %in% varName.list) {
+  derivedseercmbstggrp <- as.factor(trimws(d[,"derivedseercmbstggrp"]))
+  # THIS CODING NEEDS TO BE CONFIRMED
+  levels(derivedseercmbstggrp) <- list(Stage_I.1="1",
+                                           	Stage_2A.2A="2A",
+                                          Stage_IIB.2B="2B",
+                                          Stage_III.3="3",
+                                          Stage_IV.4="4",
+                                          Not_applicable.88="88",
+                                          Unknown.99="99")
+    new.d <- data.frame(new.d, derivedseercmbstggrp)
+    new.d <- apply_labels(new.d, derivedseercmbstggrp = "Stage group based on their T, N, and M")
+    #summary(new.d$derivedseercmbstggrp)
+}
+temp.d <- data.frame (new.d.1, derivedseercmbstggrp)
+summarytools::view(dfSummary(new.d$derivedseercmbstggrp, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+```
+
+## LA County
+
+```{r DERIVED SEER CMB STG GRP 1.LA County, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Los Angeles County.80"), ]
+derivedseercmbstggrp<-as.data.frame(temp.dd$derivedseercmbstggrp)
+names(derivedseercmbstggrp)<-"derived_seer_cmb_stg_grp"
+summarytools::view(dfSummary(derivedseercmbstggrp, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Northern CA
+
+```{r DERIVED SEER CMB STG GRP 2.Northern CA, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Northern CA.30"), ]
+derivedseercmbstggrp<-as.data.frame(temp.dd$derivedseercmbstggrp)
+names(derivedseercmbstggrp)<-"derived_seer_cmb_stg_grp"
+summarytools::view(dfSummary(derivedseercmbstggrp, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Greater CA
+
+```{r DERIVED SEER CMB STG GRP 3.Greater CA, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Greater CA.10"), ]
+derivedseercmbstggrp<-as.data.frame(temp.dd$derivedseercmbstggrp)
+names(derivedseercmbstggrp)<-"derived_seer_cmb_stg_grp"
+summarytools::view(dfSummary(derivedseercmbstggrp, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Detroit
+
+```{r DERIVED SEER CMB STG GRP 4.Detroit, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Detroit.60"), ]
+derivedseercmbstggrp<-as.data.frame(temp.dd$derivedseercmbstggrp)
+names(derivedseercmbstggrp)<-"derived_seer_cmb_stg_grp"
+summarytools::view(dfSummary(derivedseercmbstggrp, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Louisiana
+
+```{r DERIVED SEER CMB STG GRP 5.Louisiana, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Louisiana.40"), ]
+derivedseercmbstggrp<-as.data.frame(temp.dd$derivedseercmbstggrp)
+names(derivedseercmbstggrp)<-"derived_seer_cmb_stg_grp"
+summarytools::view(dfSummary(derivedseercmbstggrp, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Georgia
+
+```{r DERIVED SEER CMB STG GRP 6.Georgia, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Georgia.20"), ]
+derivedseercmbstggrp<-as.data.frame(temp.dd$derivedseercmbstggrp)
+names(derivedseercmbstggrp)<-"derived_seer_cmb_stg_grp"
+summarytools::view(dfSummary(derivedseercmbstggrp, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Michigan
+
+```{r DERIVED SEER CMB STG GRP 7.Michigan, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Michigan.61"), ]
+derivedseercmbstggrp<-as.data.frame(temp.dd$derivedseercmbstggrp)
+names(derivedseercmbstggrp)<-"derived_seer_cmb_stg_grp"
+summarytools::view(dfSummary(derivedseercmbstggrp, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+<br>
+
+# GLEASON PATTERNS CLINICAL {.tabset}
+<br>
+
+- Description: Prostate cancers are graded using Gleason score or pattern. This data item represents the Gleason primary and secondary patterns from needle core biopsy or TURP.
+
+- Rationale: Gleason Patterns Clinical is a Registry Data Collection Variable for Clinical Stage for AJCC. This data item was previously collected as Prostate, CS SSF# 7
+
+- Codes
+   + 11	Primary pattern 1, secondary pattern 1
+   + 13	Primary pattern 1, secondary pattern 3
+   + 23	Primary pattern 2, secondary pattern 3
+   + 25	Primary pattern 2, secondary pattern 5
+   + 33	Primary pattern 3, secondary pattern 3
+   + 34	Primary pattern 3, secondary pattern 4
+   + 35	Primary pattern 3, secondary pattern 5
+   + 39	Primary pattern 3, secondary pattern unknown
+   + 43	Primary pattern 4, secondary pattern 3
+   + 44	Primary pattern 4, secondary pattern 4
+   + 45	Primary pattern 4, secondary pattern 5
+   + 53	Primary pattern 5, secondary pattern 3
+   + 54	Primary pattern 5, secondary pattern 4
+   + 55	Primary pattern 5, secondary pattern 5
+   + X7	No needle core biopsy/TURP performed
+   + X9	Not documented in medical record/Gleason Patterns Clinical not assessed or unknown if assessed Unknown whether TURP and/or Biopsy done
+
+- Each Site-Specific Data Item (SSDI) applies only to selected primary sites, histologies, and years of diagnosis. Depending on applicability and standard-setter requirements, SSDIs may be left blank.
+
+- Reference page: http://datadictionary.naaccr.org/default.aspx?c=10&Version=18#3838
+<br>
+
+## All data
+```{r gleason patterns clinical, message=FALSE, results='asis'}
+st_css() #IMPORTANT!
+if("gleasonpatternsclinical" %in% varName.list) {
+  gleasonpatternsclinical <- as.factor(trimws(d[,"gleasonpatternsclinical"]))
+  # THIS CODING NEEDS TO BE CONFIRMED
+  levels(gleasonpatternsclinical) <- list(Primary_1_secondary_1.11="11",
+                                          Primary_1_secondary_3.13="13",
+                                          Primary_2_secondary_3.23="23",
+                                          Primary_2_secondary_5.25="25",
+                                          Primary_3_secondary_3.33="33",
+                                          Primary_3_secondary_5.34="34",
+                                          Primary_3_secondary_5.35="35", 
+                                          Primary_3_secondary_unknown.39="39",
+                                          Primary_4_secondary_3.43="43",
+                                          Primary_4_secondary_4.44="44",
+                                          Primary_4_secondary_5.45="45",
+                                          Primary_5_secondary_3.53="53",
+                                          Primary_5_secondary_4.54="54",
+                                          Primary_5_secondary_5.55="55",
+                                          No_needle_core_biopsy_TURP_performed.X7 = "X7",
+                                          Not_documented.X9 = "X9"
+                                          )
+    new.d <- data.frame(new.d, gleasonpatternsclinical)
+    new.d <- apply_labels(new.d, gleasonpatternsclinical = "Gleason primary and secondary patterns ")
+    #summary(new.d$gleasonpatternsclinical)
+}
+temp.d <- data.frame (new.d.1, gleasonpatternsclinical)
+summarytools::view(dfSummary(new.d$gleasonpatternsclinical, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+```
+
+## LA County
+
+```{r gleason patterns clinical 1.LA County, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Los Angeles County.80"), ]
+gleasonpatternsclinical<-as.data.frame(temp.dd$gleasonpatternsclinical)
+names(gleasonpatternsclinical)<-"gleason_patterns_clinical"
+summarytools::view(dfSummary(gleasonpatternsclinical, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Northern CA
+
+```{r gleason patterns clinical 2.Northern CA, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Northern CA.30"), ]
+gleasonpatternsclinical<-as.data.frame(temp.dd$gleasonpatternsclinical)
+names(gleasonpatternsclinical)<-"gleason_patterns_clinical"
+summarytools::view(dfSummary(gleasonpatternsclinical, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Greater CA
+
+```{r gleason patterns clinical 3.Greater CA, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Greater CA.10"), ]
+gleasonpatternsclinical<-as.data.frame(temp.dd$gleasonpatternsclinical)
+names(gleasonpatternsclinical)<-"gleason_patterns_clinical"
+summarytools::view(dfSummary(gleasonpatternsclinical, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Detroit
+
+```{r gleason patterns clinical 4.Detroit, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Detroit.60"), ]
+gleasonpatternsclinical<-as.data.frame(temp.dd$gleasonpatternsclinical)
+names(gleasonpatternsclinical)<-"gleason_patterns_clinical"
+summarytools::view(dfSummary(gleasonpatternsclinical, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Louisiana
+
+```{r gleason patterns clinical 5.Louisiana, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Louisiana.40"), ]
+gleasonpatternsclinical<-as.data.frame(temp.dd$gleasonpatternsclinical)
+names(gleasonpatternsclinical)<-"gleason_patterns_clinical"
+summarytools::view(dfSummary(gleasonpatternsclinical, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Georgia
+
+```{r gleason patterns clinical 6.Georgia, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Georgia.20"), ]
+gleasonpatternsclinical<-as.data.frame(temp.dd$gleasonpatternsclinical)
+names(gleasonpatternsclinical)<-"gleason_patterns_clinical"
+summarytools::view(dfSummary(gleasonpatternsclinical, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Michigan
+
+```{r gleason patterns clinical 7.Michigan, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Michigan.61"), ]
+gleasonpatternsclinical<-as.data.frame(temp.dd$gleasonpatternsclinical)
+names(gleasonpatternsclinical)<-"gleason_patterns_clinical"
+summarytools::view(dfSummary(gleasonpatternsclinical, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+<br>
+
+# GLEASON PATTERNS PATHOLOGICAL {.tabset}
+<br>
+
+- Description: Prostate cancers are graded using Gleason score or pattern. This data item represents the Gleason primary and secondary patterns from prostatectomy or autopsy.
+
+- Rationale: Gleason Patterns Pathological is a Registry Data Collection Variable for AJCC. This data item was previously collected as Prostate, CS SSF# 9.
+
+- Codes
+   + 14	Primary pattern 1, secondary pattern 4
+   + 15	Primary pattern 1, secondary pattern 5
+   + 33	Primary pattern 3, secondary pattern 3
+   + 34	Primary pattern 3, secondary pattern 4
+   + 35	Primary pattern 3, secondary pattern 5
+   + 41	Primary pattern 4, secondary pattern 1
+   + 43	Primary pattern 4, secondary pattern 3
+   + 44	Primary pattern 4, secondary pattern 4
+   + 45	Primary pattern 4, secondary pattern 5
+   + 53	Primary pattern 5, secondary pattern 3
+   + 54	Primary pattern 5, secondary pattern 4
+   + X6	Prostatectomy done, primary pattern unknown, secondary pattern unknown
+   + X7	No prostatectomy/autopsy performed
+   + X9	Not documented in medical record/Gleason Patterns Pathological not assessed or unknown if assessed
+Unknown if prostatectomy done
+
+- Each Site-Specific Data Item (SSDI) applies only to selected primary sites, histologies, and years of diagnosis. Depending on applicability and standard-setter requirements, SSDIs may be left blank.
+
+- Reference page: http://datadictionary.naaccr.org/default.aspx?c=10&Version=18#3839
+
+<br>
+
+## All data
+```{r gleason patterns pathological, message=FALSE, results='asis'}
+st_css() #IMPORTANT!
+if("gleasonpatternspathological" %in% varName.list) {
+  gleasonpatternspathological <- as.factor(trimws(d[,"gleasonpatternspathological"]))
+  levels(gleasonpatternspathological) <- list(Primary_1_secondary_4.14="14",
+                                          Primary_1_secondary_5.15="15",
+                                          Primary_3_secondary_3.33="33",
+                                          Primary_3_secondary_5.34="34",
+                                          Primary_3_secondary_5.35="35", 
+                                          Primary_4_secondary_1.41="41",
+                                          Primary_4_secondary_3.43="43",
+                                          Primary_4_secondary_4.44="44",
+                                          Primary_4_secondary_5.45="45",
+                                          Primary_5_secondary_3.53="53",
+                                          Primary_5_secondary_4.54="54",
+                                          Primary_unknown_secondary_unknown.X6="X6",
+                                          No_prostatectomy_autopsy_performed.X6= "X6",
+                                          Not_documented.X9 = "X9"
+                                          )
+    new.d <- data.frame(new.d, gleasonpatternspathological)
+    new.d <- apply_labels(new.d, gleasonpatternspathological = "Gleason primary and secondary patterns ")
+    #summary(new.d$gleasonpatternspathological)
+}
+temp.d <- data.frame (new.d.1, gleasonpatternspathological)
+summarytools::view(dfSummary(new.d$gleasonpatternspathological, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE ), method = "render")
+```
+
+## LA County
+
+```{r gleason patterns pathological 1.LA County, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Los Angeles County.80"), ]
+gleasonpatternspathological<-as.data.frame(temp.dd$gleasonpatternspathological)
+names(gleasonpatternspathological)<-"gleason_patterns_pathologica"
+summarytools::view(dfSummary(gleasonpatternspathological, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE , headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Northern CA
+
+```{r gleason patterns pathological 2.Northern CA, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Northern CA.30"), ]
+gleasonpatternspathological<-as.data.frame(temp.dd$gleasonpatternspathological)
+names(gleasonpatternspathological)<-"gleason_patterns_pathologica"
+summarytools::view(dfSummary(gleasonpatternspathological, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE ), method = "render")
+rm(temp.dd)
+```
+
+## Greater CA
+
+```{r gleason patterns pathological 3.Greater CA, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Greater CA.10"), ]
+gleasonpatternspathological<-as.data.frame(temp.dd$gleasonpatternspathological)
+names(gleasonpatternspathological)<-"gleason_patterns_pathologica"
+summarytools::view(dfSummary(gleasonpatternspathological, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE ), method = "render")
+rm(temp.dd)
+```
+
+## Detroit
+
+```{r gleason patterns pathological 4.Detroit, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Detroit.60"), ]
+gleasonpatternspathological<-as.data.frame(temp.dd$gleasonpatternspathological)
+names(gleasonpatternspathological)<-"gleason_patterns_pathologica"
+summarytools::view(dfSummary(gleasonpatternspathological, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE ), method = "render")
+rm(temp.dd)
+```
+
+## Louisiana
+
+```{r gleason patterns pathological 5.Louisiana, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Louisiana.40"), ]
+gleasonpatternspathological<-as.data.frame(temp.dd$gleasonpatternspathological)
+names(gleasonpatternspathological)<-"gleason_patterns_pathologica"
+summarytools::view(dfSummary(gleasonpatternspathological, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE , headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Georgia
+
+```{r gleason patterns pathological 6.Georgia, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Georgia.20"), ]
+gleasonpatternspathological<-as.data.frame(temp.dd$gleasonpatternspathological)
+names(gleasonpatternspathological)<-"gleason_patterns_pathologica"
+summarytools::view(dfSummary(gleasonpatternspathological, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE , headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Michigan
+
+```{r gleason patterns pathological 7.Michigan, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Michigan.61"), ]
+gleasonpatternspathological<-as.data.frame(temp.dd$gleasonpatternspathological)
+names(gleasonpatternspathological)<-"gleason_patterns_pathologica"
+summarytools::view(dfSummary(gleasonpatternspathological, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE ), method = "render")
+rm(temp.dd)
+```
+
+<br>
+
+# GLEASON SCORE CLINICAL {.tabset}
+<br>
+
+- Description: This data item records the Gleason score based on adding the values for primary and secondary patterns in Needle Core Biopsy or TURP.
+
+- Rationale: Gleason Score Clinical is a Registry Data Collection Variable for AJCC. This data item was previously collected as Prostate, CS SSF# 8.
+
+- Codes
+   + 02	Gleason score 2
+   + 03	Gleason score 3
+   + 04	Gleason score 4
+   + 05	Gleason score 5
+   + 06	Gleason score 6
+   + 07	Gleason score 7
+   + 08	Gleason score 8
+   + 09	Gleason score 9
+   + 10	Gleason score 10
+   + X7	No needle core biopsy/TURP performed
+   + X8	Not applicable: Information not collected for this case
+(If this information is required by your standard setter, use of code X8 may result in an edit error.)
+   + X9	Not documented in medical record/Gleason Score Clinical not assessed or unknown if assessed
+
+- Each Site-Specific Data Item (SSDI) applies only to selected primary sites, histologies, and years of diagnosis. Depending on applicability and standard-setter requirements, SSDIs may be left blank.\
+
+- Reference page: http://datadictionary.naaccr.org/default.aspx?c=10&Version=18#3840
+
+<br>
+
+## All data
+```{r gleason score clinical, message=FALSE, results='asis'}
+st_css() #IMPORTANT!
+if("gleasonscoreclinical" %in% varName.list) {
+  gleasonscoreclinical <- trimws(d[,"gleasonscoreclinical"])
+  gleasonscoreclinical[ which(gleasonscoreclinical=="06")]<-"6"
+  gleasonscoreclinical[ which(gleasonscoreclinical=="07")]<-"7"
+  gleasonscoreclinical[ which(gleasonscoreclinical=="08")]<-"8"
+  gleasonscoreclinical[ which(gleasonscoreclinical=="09")]<-"9"
+  gleasonscoreclinical<-as.factor(gleasonscoreclinical)
+  levels(gleasonscoreclinical) <- list(Gleason_score_2.2="2",
+                                       Gleason_score_3.3="3",
+                                       Gleason_score_4.4="4",
+                                       Gleason_score_5.5="5",
+                                       Gleason_score_6.6="6", 
+                                       Gleason_score_7.7="7",
+                                       Gleason_score_8.8="8",
+                                       Gleason_score_9.9="9",
+                                       Gleason_score_10.10="10",
+                                       Not_documented.X9 = "X9")
+    new.d <- data.frame(new.d, gleasonscoreclinical)
+    new.d <- apply_labels(new.d, gleasonscoreclinical = " Gleason score")
+    #summary(new.d$gleasonscoreclinical)
+}
+temp.d <- data.frame (new.d.1, gleasonscoreclinical)
+summarytools::view(dfSummary(new.d$gleasonscoreclinical, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE , headings = FALSE), method = "render")
+```
+
+## LA County
+
+```{r gleason score clinical 1.LA County, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Los Angeles County.80"), ]
+gleasonscoreclinical<-as.data.frame(temp.dd$gleasonscoreclinical)
+names(gleasonscoreclinical)<-"gleason_score_clinical"
+summarytools::view(dfSummary(gleasonscoreclinical, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE , headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Northern CA
+
+```{r gleason score clinical 2.Northern CA, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Northern CA.30"), ]
+gleasonscoreclinical<-as.data.frame(temp.dd$gleasonscoreclinical)
+names(gleasonscoreclinical)<-"gleason_score_clinical"
+summarytools::view(dfSummary(gleasonscoreclinical, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE ), method = "render")
+rm(temp.dd)
+```
+
+## Greater CA
+
+```{r gleason score clinical 3.Greater CA, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Greater CA.10"), ]
+gleasonscoreclinical<-as.data.frame(temp.dd$gleasonscoreclinical)
+names(gleasonscoreclinical)<-"gleason_score_clinical"
+summarytools::view(dfSummary(gleasonscoreclinical, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Detroit
+
+```{r gleason score clinical 4.Detroit, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Detroit.60"), ]
+gleasonscoreclinical<-as.data.frame(temp.dd$gleasonscoreclinical)
+names(gleasonscoreclinical)<-"gleason_score_clinical"
+summarytools::view(dfSummary(gleasonscoreclinical, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Louisiana
+
+```{r gleason score clinical 5.Louisiana, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Louisiana.40"), ]
+gleasonscoreclinical<-as.data.frame(temp.dd$gleasonscoreclinical)
+names(gleasonscoreclinical)<-"gleason_score_clinical"
+summarytools::view(dfSummary(gleasonscoreclinical, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Georgia
+
+```{r gleason score clinical 6.Georgia, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Georgia.20"), ]
+gleasonscoreclinical<-as.data.frame(temp.dd$gleasonscoreclinical)
+names(gleasonscoreclinical)<-"gleason_score_clinical"
+summarytools::view(dfSummary(gleasonscoreclinical, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Michigan
+
+```{r gleason score clinical 7.Michigan, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Michigan.61"), ]
+gleasonscoreclinical<-as.data.frame(temp.dd$gleasonscoreclinical)
+names(gleasonscoreclinical)<-"gleason_score_clinical"
+summarytools::view(dfSummary(gleasonscoreclinical, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+<br>
+
+# GLEASON SCORE PATHOLOGICAL {.tabset}
+<br>
+
+- Description: This data item records the Gleason score based on adding the values for primary and secondary patterns from prostatectomy or autopsy.
+
+- Rationale: Gleason Score Pathological is a Registry Data Collection Variable for AJCC. This data item was previously collected as Prostate, CS SSF# 10.
+
+- Codes
+   + 02	Gleason score 2
+   + 03	Gleason score 3
+   + 04	Gleason score 4
+   + 05	Gleason score 5
+   + 06	Gleason score 6
+   + 07	Gleason score 7
+   + 08	Gleason score 8
+   + 09	Gleason score 9
+   + 10	Gleason score 10
+   + X7	No prostatectomy done
+   + X8	Not applicable: Information not collected for this case
+(If this information is required by your standard setter, use of code X8 may result in an edit error.)
+   + X9	Not documented in medical record/Gleason Score Pathological not assessed or unknown if assessed
+
+- Each Site-Specific Data Item (SSDI) applies only to selected primary sites, histologies, and years of diagnosis. Depending on applicability and standard-setter requirements, SSDIs may be left blank.
+
+- Reference page: http://datadictionary.naaccr.org/default.aspx?c=10&Version=18#3841
+
+<br>
+
+## All data
+```{r gleason score pathological, message=FALSE, results='asis'}
+st_css() #IMPORTANT!
+if("gleasonscorepathological" %in% varName.list) {
+  gleasonscorepathological <- as.factor(trimws(d[,"gleasonscorepathological"]))
+  levels(gleasonscorepathological) <- list(Gleason_score_3.03 ="03",
+                                       Gleason_score_4.04="04",
+                                       Gleason_score_6.06="06", 
+                                       Gleason_score_7.07="07",
+                                       Gleason_score_8.08="08",
+                                       Gleason_score_9.09="09",
+                                       No_prostatectomy_done.X7="X7",
+                                       Not_applicable.X8="X8",
+                                       Not_documented.X9 = "X9")
+    new.d <- data.frame(new.d, gleasonscorepathological)
+    new.d <- apply_labels(new.d, gleasonscorepathological = " Gleason score")
+    #summary(new.d$gleasonscorepathological)
+}
+temp.d <- data.frame (new.d.1, gleasonscorepathological)
+summarytools::view(dfSummary(new.d$gleasonscorepathological, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+```
+
+## LA County
+
+```{r gleason score pathological 1.LA County, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Los Angeles County.80"), ]
+gleasonscorepathological<-as.data.frame(temp.dd$gleasonscorepathological)
+names(gleasonscorepathological)<-"gleason_score_pathological"
+summarytools::view(dfSummary(gleasonscorepathological, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Northern CA
+
+```{r gleason score pathological 2.Northern CA, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Northern CA.30"), ]
+gleasonscorepathological<-as.data.frame(temp.dd$gleasonscorepathological)
+names(gleasonscorepathological)<-"gleason_score_pathological"
+summarytools::view(dfSummary(gleasonscorepathological, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Greater CA
+
+```{r gleason score pathological 3.Greater CA, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Greater CA.10"), ]
+gleasonscorepathological<-as.data.frame(temp.dd$gleasonscorepathological)
+names(gleasonscorepathological)<-"gleason_score_pathological"
+summarytools::view(dfSummary(gleasonscorepathological, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE , headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Detroit
+
+```{r gleason score pathological 4.Detroit, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Detroit.60"), ]
+gleasonscorepathological<-as.data.frame(temp.dd$gleasonscorepathological)
+names(gleasonscorepathological)<-"gleason_score_pathological"
+summarytools::view(dfSummary(gleasonscorepathological, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE , headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Louisiana
+
+```{r gleason score pathological 5.Louisiana, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Louisiana.40"), ]
+gleasonscorepathological<-as.data.frame(temp.dd$gleasonscorepathological)
+names(gleasonscorepathological)<-"gleason_score_pathological"
+summarytools::view(dfSummary(gleasonscorepathological, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Georgia
+
+```{r gleason score pathological 6.Georgia, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Georgia.20"), ]
+gleasonscorepathological<-as.data.frame(temp.dd$gleasonscorepathological)
+names(gleasonscorepathological)<-"gleason_score_pathological"
+summarytools::view(dfSummary(gleasonscorepathological, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Michigan
+
+```{r gleason score pathological 7.Michigan, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Michigan.61"), ]
+gleasonscorepathological<-as.data.frame(temp.dd$gleasonscorepathological)
+names(gleasonscorepathological)<-"gleason_score_pathological"
+summarytools::view(dfSummary(gleasonscorepathological, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+<br>
+
+# GLEASON TERTIARY PATTERN  {.tabset}
+<br>
+
+- Description: Prostate cancers are graded using Gleason score or pattern. This data item represents the tertiary pattern value from prostatectomy or autopsy.
+
+- Rationale: Tertiary Gleason pattern on prostatectomy is a Registry Data Collection Variable for AJCC. This data item was previously collected as Prostate, CS SSF# 11.
+
+- Codes
+   + 10	Tertiary pattern 1
+   + 20	Tertiary pattern 2
+   + 30	Tertiary pattern 3
+   + 40	Tertiary pattern 4
+   + 50	Tertiary pattern 5
+   + X7	No prostatectomy/autopsy performed
+   + X8	Not applicable: Information not collected for this case
+(If this information is required by your standard setter, use of code X8 may result in an edit error.)
+   + X9	Not documented in medical record/Gleason Tertiary Pattern not assessed or unknown if assessed
+
+- Each Site-Specific Data Item (SSDI) applies only to selected primary sites, histologies, and years of diagnosis. Depending on applicability and standard-setter requirements, SSDIs may be left blank.
+
+- Reference: http://datadictionary.naaccr.org/default.aspx?c=10&Version=18#3842
+
+<br>
+
+## All data
+```{r gleason tertiary pattern, message=FALSE, results='asis'}
+st_css() #IMPORTANT!
+if("gleasontertiarypattern" %in% varName.list) {
+  gleasontertiarypattern <- as.factor(trimws(d[,"gleasontertiarypattern"]))
+  levels(gleasontertiarypattern) <- list(Tertiary_pattern_2.20="20",
+                                         Tertiary_pattern_3.30="30",
+                                         Tertiary_pattern_4.40="40", 
+                                         Tertiary_pattern_5.50="50",
+                                         No_prostatectomy_autopsy_performed.X7="X7",
+                                         Not_applicable.X8="X8",
+                                         Not_documented.X9 = "X9")
+    new.d <- data.frame(new.d, gleasontertiarypattern)
+    new.d <- apply_labels(new.d, gleasontertiarypattern = " Gleason score")
+    #summary(new.d$gleasontertiarypattern)
+}
+temp.d <- data.frame (new.d.1, gleasontertiarypattern)
+summarytools::view(dfSummary(new.d$gleasontertiarypattern, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+```
+
+## LA County
+
+```{r gleason tertiary pattern 1.LA County, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Los Angeles County.80"), ]
+gleasontertiarypattern<-as.data.frame(temp.dd$gleasontertiarypattern)
+names(gleasontertiarypattern)<-"gleason_tertiary_pattern"
+summarytools::view(dfSummary(gleasontertiarypattern, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE , headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Northern CA
+
+```{r gleason tertiary pattern 2.Northern CA, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Northern CA.30"), ]
+gleasontertiarypattern<-as.data.frame(temp.dd$gleasontertiarypattern)
+names(gleasontertiarypattern)<-"gleason_tertiary_pattern"
+summarytools::view(dfSummary(gleasontertiarypattern, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE , headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Greater CA
+
+```{r gleason tertiary pattern 3.Greater CA, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Greater CA.10"), ]
+gleasontertiarypattern<-as.data.frame(temp.dd$gleasontertiarypattern)
+names(gleasontertiarypattern)<-"gleason_tertiary_pattern"
+summarytools::view(dfSummary(gleasontertiarypattern, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Detroit
+
+```{r gleason tertiary pattern 4.Detroit, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Detroit.60"), ]
+gleasontertiarypattern<-as.data.frame(temp.dd$gleasontertiarypattern)
+names(gleasontertiarypattern)<-"gleason_tertiary_pattern"
+summarytools::view(dfSummary(gleasontertiarypattern, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE , headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Louisiana
+
+```{r gleason tertiary pattern 5.Louisiana, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Louisiana.40"), ]
+gleasontertiarypattern<-as.data.frame(temp.dd$gleasontertiarypattern)
+names(gleasontertiarypattern)<-"gleason_tertiary_pattern"
+summarytools::view(dfSummary(gleasontertiarypattern, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE , headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Georgia
+
+```{r gleason tertiary pattern 6.Georgia, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Georgia.20"), ]
+gleasontertiarypattern<-as.data.frame(temp.dd$gleasontertiarypattern)
+names(gleasontertiarypattern)<-"gleason_tertiary_pattern"
+summarytools::view(dfSummary(gleasontertiarypattern, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Michigan
+
+```{r gleason tertiary pattern 7.Michigan, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Michigan.61"), ]
+gleasontertiarypattern<-as.data.frame(temp.dd$gleasontertiarypattern)
+names(gleasontertiarypattern)<-"gleason_tertiary_pattern"
+summarytools::view(dfSummary(gleasontertiarypattern, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE ), method = "render")
+rm(temp.dd)
+```
+
+<br>
+
+
+# GRADE CLINICAL  {.tabset}
+<br>
+
+- Description: This data item records the grade of a solid primary tumor before any treatment (surgical resection or initiation of any treatment including neoadjuvant). 
+For cases diagnosed January 1, 2018, and later, this data item, along with Grade Pathological and Grade Post-Neoadjuvant, replaces NAACCR Data Item Grade [440] as well as SSF’s for cancer sites with alternative grading systems (e.g., breast [Bloom-Richardson], prostate [Gleason]).
+
+- Rationale: Grade is a measure of the aggressiveness of the tumor. Grade and cell type are important prognostic indicators for many cancers. For some sites, grade is required to assign the clinical stage group.
+For those cases that are eligible AJCC staging, the recommended grading system is specified in the AJCC Chapter. The AJCC Chapter-specific grading systems (codes 1-5) take priority over the generic grade definitions (codes A-E, L, H, 9). For those cases that are not eligible for AJCC staging, if the recommended grading system is not documented, the generic grade definitions would apply.
+
+- Codes
+   + 1 Grade Group 1: Gleason score less than or equal to 6
+   + 2 Grade Group 2: Gleason score 7/Gleason pattern 3+4
+   + 3 Grade Group 3: Gleason score 7/Gleason pattern 4+3
+   + 4 Grade Group 4: Gleason score 8
+   + 5 Grade Group 5: Gleason score 9 or 10
+   + 9 Grade cannot be assessed; Unknown
+   
+- Each Site-Specific Data Item (SSDI) applies only to selected primary sites, histologies, and years of diagnosis. Depending on applicability and standard-setter requirements, SSDIs may be left blank. Leave blank for cases diagnosed prior to 2018.
+
+- Reference: http://datadictionary.naaccr.org/default.aspx?c=10&Version=18#3843
+
+<br>
+
+## All data
+```{r grade clinical, message=FALSE, results='asis'}
+st_css() #IMPORTANT!
+if("gradeclinical" %in% varName.list) {
+  gradeclinical <- as.factor(trimws(d[,"gradeclinical"]))
+  levels(gradeclinical) <- list(Grade_Group_1.1="1",
+                                Grade_Group_2.2="2",
+                                Grade_Group_3.3="3", 
+                                Grade_Group_4.4="4",
+                                Grade_Group_5.5="5",
+                                Not_found_grade_8.8="8",
+                                Unknown.9 = "9")
+    new.d <- data.frame(new.d, gradeclinical)
+    new.d <- apply_labels(new.d, gradeclinical = "Grade of primary tumor before any treatment")
+    #summary(new.d$gradeclinical)
+}
+temp.d <- data.frame (new.d.1, gradeclinical)
+summarytools::view(dfSummary(new.d$gradeclinical, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE , headings = FALSE), method = "render")
+```
+
+## LA County
+
+```{r grade clinical 1.LA County, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Los Angeles County.80"), ]
+gradeclinical<-as.data.frame(temp.dd$gradeclinical)
+names(gradeclinical)<-"grade_clinical"
+summarytools::view(dfSummary(gradeclinical, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE , headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Northern CA
+
+```{r grade clinical 2.Northern CA, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Northern CA.30"), ]
+gradeclinical<-as.data.frame(temp.dd$gradeclinical)
+names(gradeclinical)<-"grade_clinical"
+summarytools::view(dfSummary(gradeclinical, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE ), method = "render")
+rm(temp.dd)
+```
+
+## Greater CA
+
+```{rgrade clinical 3.Greater CA, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Greater CA.10"), ]
+gradeclinical<-as.data.frame(temp.dd$gradeclinical)
+names(gradeclinical)<-"grade_clinical"
+summarytools::view(dfSummary(gradeclinical, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE ), method = "render")
+rm(temp.dd)
+```
+
+## Detroit
+
+```{r grade clinical 4.Detroit, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Detroit.60"), ]
+gradeclinical<-as.data.frame(temp.dd$gradeclinical)
+names(gradeclinical)<-"grade_clinical"
+summarytools::view(dfSummary(gradeclinical, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE ), method = "render")
+rm(temp.dd)
+```
+
+## Louisiana
+
+```{r grade clinical 5.Louisiana, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Louisiana.40"), ]
+gradeclinical<-as.data.frame(temp.dd$gradeclinical)
+names(gradeclinical)<-"grade_clinical"
+summarytools::view(dfSummary(gradeclinical, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE ), method = "render")
+rm(temp.dd)
+```
+
+## Georgia
+
+```{r ngrade clinical 6.Georgia, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Georgia.20"), ]
+gradeclinical<-as.data.frame(temp.dd$gradeclinical)
+names(gradeclinical)<-"grade_clinical"
+summarytools::view(dfSummary(gradeclinical, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE , headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Michigan
+
+```{r grade clinical 7.Michigan, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Michigan.61"), ]
+gradeclinical<-as.data.frame(temp.dd$gradeclinical)
+names(gradeclinical)<-"grade_clinical"
+summarytools::view(dfSummary(gradeclinical, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+<br>
+
+# GRADE PATHOLOGICAL  {.tabset}
+<br>
+
+- Description: This data item records the grade of a solid primary tumor that has been resected and for which no neoadjuvant therapy was administered. If AJCC staging is being assigned, the tumor must have met the surgical resection requirements in the AJCC manual. This may include the grade from the clinical workup. Record the highest grade documented from any microscopic specimen of the primary site whether from the clinical workup or the surgical resection. For cases diagnosed January 1, 2018, and later, this data item, along with Grade Clinical and Grade Post-Neoadjuvant, replaces NAACCR Data Item Grade [440] as well as SSF’s for cancer sites with alternative grading systems (e.g., breast [Bloom-Richardson], prostate [Gleason]).
+
+- Rationale: Grade is a measure of the aggressiveness of the tumor. Grade and cell type are important prognostic indicators for many cancers. For some sites, grade is required to assign the pathological stage group. For those cases that are eligible AJCC staging, the recommended grading system is specified in the AJCC Chapter. The AJCC Chapter-specific grading systems (codes 1-5) take priority over the generic grade definitions (codes A-E, L, H, 9). For those cases that are not eligible for AJCC staging, if the recommended grading system is not documented, the generic grade definitions would apply.
+
+- Codes
+   + 1 Grade Group 1: Gleason score less than or equal to 6
+   + 2 Grade Group 2: Gleason score 7/Gleason pattern 3+4
+   + 3 Grade Group 3: Gleason score 7/Gleason pattern 4+3
+   + 4 Grade Group 4: Gleason score 8
+   + 5 Grade Group 5: Gleason score 9 or 10
+   + 9 Grade cannot be assessed; Unknown
+
+- Each Site-Specific Data Item (SSDI) applies only to selected primary sites, histologies, and years of diagnosis. Depending on applicability and standard-setter requirements, SSDIs may be left blank. Leave blank for cases diagnosed prior to 2018.
+
+- Reference: http://datadictionary.naaccr.org/default.aspx?c=10&Version=18#3844
+
+<br>
+
+## All data
+```{r grade pathological, message=FALSE, results='asis'}
+st_css() #IMPORTANT!
+if("gradepathological" %in% varName.list) {
+  gradepathological <- as.factor(trimws(d[,"gradepathological"]))
+  levels(gradepathological) <- list(Grade_Group_1.1="1",
+                                Grade_Group_2.2="2",
+                                Grade_Group_3.3="3", 
+                                Grade_Group_4.4="4",
+                                Grade_Group_5.5="5",
+                                Not_found_grade_8.8="8",
+                                Unknown.9 = "9")
+    new.d <- data.frame(new.d, gradepathological)
+    new.d <- apply_labels(new.d, gradepathological = "Grade of primary tumor before any treatment")
+    #summary(new.d$gradepathological)
+}
+temp.d <- data.frame (new.d.1, gradepathological)
+summarytools::view(dfSummary(new.d$gradepathological, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE ), method = "render")
+```
+
+## LA County
+
+```{r grade pathological 1.LA County, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Los Angeles County.80"), ]
+gradepathological<-as.data.frame(temp.dd$gradepathological)
+names(gradepathological)<-"grade_pathological"
+summarytools::view(dfSummary(gradepathological, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE ), method = "render")
+rm(temp.dd)
+```
+
+## Northern CA
+
+```{r grade pathological 2.Northern CA, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Northern CA.30"), ]
+gradepathological<-as.data.frame(temp.dd$gradepathological)
+names(gradepathological)<-"grade_pathological"
+summarytools::view(dfSummary(gradepathological, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE ), method = "render")
+rm(temp.dd)
+```
+
+## Greater CA
+
+```{rgrade pathological 3.Greater CA, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Greater CA.10"), ]
+gradepathological<-as.data.frame(temp.dd$gradepathological)
+names(gradepathological)<-"grade_pathological"
+summarytools::view(dfSummary(gradepathological, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE ), method = "render")
+rm(temp.dd)
+```
+
+## Detroit
+
+```{r grade pathological 4.Detroit, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Detroit.60"), ]
+gradepathological<-as.data.frame(temp.dd$gradepathological)
+names(gradepathological)<-"grade_pathological"
+summarytools::view(dfSummary(gradepathological, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE ), method = "render")
+rm(temp.dd)
+```
+
+## Louisiana
+
+```{r grade pathological 5.Louisiana, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Louisiana.40"), ]
+gradepathological<-as.data.frame(temp.dd$gradepathological)
+names(gradepathological)<-"grade_pathological"
+summarytools::view(dfSummary(gradepathological, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE , headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Georgia
+
+```{r ngrade pathological 6.Georgia, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Georgia.20"), ]
+gradepathological<-as.data.frame(temp.dd$gradepathological)
+names(gradepathological)<-"grade_pathological"
+summarytools::view(dfSummary(gradepathological, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE , headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Michigan
+
+```{r grade pathological 7.Michigan, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Michigan.61"), ]
+gradepathological<-as.data.frame(temp.dd$gradepathological)
+names(gradepathological)<-"grade_pathological"
+summarytools::view(dfSummary(gradepathological, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE ), method = "render")
+rm(temp.dd)
+```
+
+<br>
+
+# NUMBER OF CORES EXAMINED  {.tabset}
+<br>
+
+- Description: This data item represents the number of cores examined as documented in the pathology report from needle biopsy of the prostate gland.
+
+- Rationale: Number of Cores Examined is a Registry Data Collection Variable for AJCC. This data item was previously collected as Prostate, CS SSF# 13.
+
+- Codes: 
+   + 01-99	1 - 99 cores examined(Exact number of cores examined)
+   + X1	100 or more cores examined
+   + X6	Biopsy cores examined, number unknown
+   + X7	No needle core biopsy performed
+   + X8	Not applicable: Information not collected for this case(If this information is required by your standard setter, use of code X8 may result in an edit error.)
+   + X9	Not documented in medical record/Number of cores examined not assessed or unknown if assessed
+
+- Each Site-Specific Data Item (SSDI) applies only to selected primary sites, histologies, and years of diagnosis. Depending on applicability and standard-setter requirements, SSDIs may be left blank.
+
+- Reference: http://datadictionary.naaccr.org/default.aspx?c=10&Version=18#3897
+
+<br>
+
+## All data
+```{r number of cores examined, message=FALSE, results='asis'}
+st_css() #IMPORTANT!
+if("numberofcoresexamined" %in% varName.list) {
+  numberofcoresexamined <- trimws(d[,"numberofcoresexamined"])
+  numberofcoresexamined[ which(numberofcoresexamined=="09")]<-"9"
+  numberofcoresexamined[ which(numberofcoresexamined=="08")]<-"8"
+  numberofcoresexamined<-as.factor(numberofcoresexamined)
+  levels(numberofcoresexamined) <- list(examined_1_core.1="1",
+                                        examined_2_core.2="2",
+                                        examined_3_core.3="3",
+                                        examined_4_core.4="4",
+                                        examined_5_core.5="5",
+                                        examined_6_core.6="6",
+                                        examined_7_core.7="7",
+                                        examined_8_core.8="8",
+                                        examined_9_core.9="9",
+                                        examined_10_core.10="10",
+                                        examined_11_core.11="11",
+                                        examined_12_core.12="12",
+                                        examined_13_core.13="13",
+                                        examined_14_core.14="14",
+                                        examined_15_core.15="15",
+                                        examined_16_core.16="16",
+                                        examined_17_core.17="17",
+                                        examined_18_core.18="18",
+                                        examined_19_core.19="19",
+                                        examined_20_core.20="20",
+                                        examined_22_core.22="22",
+                                        examined_21_core.21="21",
+                                        examined_23_core.23="23",
+                                        examined_24_core.24="24",
+                                        examined_25_core.25="25",
+                                        examined_27_core.27="27",
+                                        examined_29_core.29="29",
+                                        examined_30_core.30="30",
+                                        examined_31_core.31="31",
+                                        examined_35_core.35="35",
+                                        examined_36_core.36="36",
+                                        examined_45_core.45="45",
+                                        examined_91_core.91="91",
+                                        examined_99_core.99="99",
+                                        Biopsy_cores_examined_unknown_number.X6="X6",
+                                        No_needle_core_biopsy_performed.X7 = "X7",
+                                        Not_documented.X9 = "X9")
+    new.d <- data.frame(new.d, numberofcoresexamined)
+    new.d <- apply_labels(new.d, numberofcoresexamined = " Gleason score")
+    #summary(new.d$numberofcoresexamined)
+}
+temp.d <- data.frame (new.d.1, numberofcoresexamined)
+summarytools::view(dfSummary(new.d$numberofcoresexamined, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE ), method = "render")
+```
+
+## LA County
+
+```{r number of cores examined 1.LA County, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Los Angeles County.80"), ]
+numberofcoresexamined<-as.data.frame(temp.dd$numberofcoresexamined)
+names(numberofcoresexamined)<-"number_of_cores_examined"
+summarytools::view(dfSummary(numberofcoresexamined, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE ), method = "render")
+rm(temp.dd)
+```
+
+## Northern CA
+
+```{r number of cores examined 2.Northern CA, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Northern CA.30"), ]
+numberofcoresexamined<-as.data.frame(temp.dd$numberofcoresexamined)
+names(numberofcoresexamined)<-"number_of_cores_examined"
+summarytools::view(dfSummary(numberofcoresexamined, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE , headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Greater CA
+
+```{r number of cores examined 3.Greater CA, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Greater CA.10"), ]
+numberofcoresexamined<-as.data.frame(temp.dd$numberofcoresexamined)
+names(numberofcoresexamined)<-"number_of_cores_examined"
+summarytools::view(dfSummary(numberofcoresexamined, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE ), method = "render")
+rm(temp.dd)
+```
+
+## Detroit
+
+```{r number of cores examined 4.Detroit, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Detroit.60"), ]
+numberofcoresexamined<-as.data.frame(temp.dd$numberofcoresexamined)
+names(numberofcoresexamined)<-"number_of_cores_examined"
+summarytools::view(dfSummary(numberofcoresexamined, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE , headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Louisiana
+
+```{r number of cores examined 5.Louisiana, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Louisiana.40"), ]
+numberofcoresexamined<-as.data.frame(temp.dd$numberofcoresexamined)
+names(numberofcoresexamined)<-"number_of_cores_examined"
+summarytools::view(dfSummary(numberofcoresexamined, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE ), method = "render")
+rm(temp.dd)
+```
+
+## Georgia
+
+```{r number of cores examined 6.Georgia, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Georgia.20"), ]
+numberofcoresexamined<-as.data.frame(temp.dd$numberofcoresexamined)
+names(numberofcoresexamined)<-"number_of_cores_examined"
+summarytools::view(dfSummary(numberofcoresexamined, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE ), method = "render")
+rm(temp.dd)
+```
+
+## Michigan
+
+```{r number of cores examined 7.Michigan, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Michigan.61"), ]
+numberofcoresexamined<-as.data.frame(temp.dd$numberofcoresexamined)
+names(numberofcoresexamined)<-"number_of_cores_examined"
+summarytools::view(dfSummary(numberofcoresexamined, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE ), method = "render")
+rm(temp.dd)
+```
+
+<br>
+
+# NUMBER OF CORES POSITIVE  {.tabset}
+<br>
+
+- Description:This data item represents the number of positive cores documented in the pathology report from needle biopsy of the prostate gland.
+
+- Rationale: Number of Cores Positive is a Registry Data Collection Variable for AJCC. This data item was previously collected as Prostate, CS SSF# 12.
+
+- Codes
+   + 00: All examined cores negative
+   + 01-99: 1 - 99 cores positive (Exact number of cores positive)
+   + X1: 100 or more cores positive
+   + X6: Biopsy cores positive, number unknown
+   + X7: No needle core biopsy performed
+   + X8: Not applicable: Information not collected for this case (If this information is required by your standard setter, use of code X8 may result in an edit error.)
+   + X9: Not documented in medical record/Number of Cores Positive not assessed or unknown if assessed
+   
+- Each Site-Specific Data Item (SSDI) applies only to selected primary sites, histologies, and years of diagnosis. Depending on applicability and standard-setter requirements, SSDIs may be left blank.
+
+- Reference page: http://datadictionary.naaccr.org/default.aspx?c=10&Version=18#3898
+
+<br>
+
+## All data
+```{r number of cores positive, message=FALSE, results='asis'}
+st_css() #IMPORTANT!
+if("numberofcorespositive" %in% varName.list) {
+  numberofcorespositive <- trimws(d[,"numberofcorespositive"])
+  numberofcorespositive[ which(numberofcorespositive=="02")]<-"2"
+  numberofcorespositive[ which(numberofcorespositive=="04")]<-"4"
+  numberofcorespositive[ which(numberofcorespositive=="05")]<-"5"
+  numberofcorespositive[ which(numberofcorespositive=="01")]<-"1"
+  numberofcorespositive[ which(numberofcorespositive=="07")]<-"7"
+  numberofcorespositive[ which(numberofcorespositive=="09")]<-"9"
+  numberofcorespositive[ which(numberofcorespositive=="08")]<-"8"
+  numberofcorespositive[ which(numberofcorespositive=="03")]<-"3"
+  numberofcorespositive<-as.factor(numberofcorespositive)
+  levels(numberofcorespositive) <- list(examined_1_core.1="1",
+                                        examined_2_cores.2="2",
+                                        examined_3_core.3="3",
+                                        examined_4_core.4="4",
+                                        examined_5_core.5="5",
+                                        examined_6_core.6="6",
+                                        examined_7_core.7="7",
+                                        examined_8_core.8="8",
+                                        examined_9_core.9="9",
+                                        examined_10_core.10="10",
+                                        examined_11_core.11="11",
+                                        examined_12_core.12="12",
+                                        examined_13_core.13="13",
+                                        examined_14_core.14="14",
+                                        examined_15_core.15="15",
+                                        examined_16_core.16="16",
+                                        examined_17_core.17="17",
+                                        examined_18_core.18="18",
+                                        examined_19_core.19="19",
+                                        examined_20_core.20="20",
+                                        examined_22_core.22="22",
+                                        examined_21_core.21="21",
+                                        examined_23_core.23="23",
+                                        examined_24_core.24="24",
+                                        examined_25_core.25="25",
+                                        examined_27_core.27="27",
+                                        examined_29_core.29="29",
+                                        examined_30_core.30="30",
+                                        examined_31_core.31="31",
+                                        examined_35_core.35="35",
+                                        examined_36_core.36="36",
+                                        examined_45_core.45="45",
+                                        examined_91_core.91="91",
+                                        examined_99_core.99="99",
+                                        Biopsy_cores_examined_unknown_number.X6="X6",
+                                        No_needle_core_biopsy_performed.X7 = "X7",
+                                        Not_applicable.X8 = "X8",
+                                        Not_documented.X9 = "X9")
+    new.d <- data.frame(new.d, numberofcorespositive)
+    new.d <- apply_labels(new.d, numberofcorespositive = " Gleason score")
+    #summary(new.d$numberofcorespositive)
+}
+temp.d <- data.frame (new.d.1, numberofcorespositive)
+summarytools::view(dfSummary(new.d$numberofcorespositive, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+```
+
+## LA County
+
+```{r number of cores positive 1.LA County, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Los Angeles County.80"), ]
+numberofcorespositive<-as.data.frame(temp.dd$numberofcorespositive)
+names(numberofcorespositive)<-"number_of_cores_positive"
+summarytools::view(dfSummary(numberofcorespositive, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Northern CA
+
+```{r number of cores positive 2.Northern CA, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Northern CA.30"), ]
+numberofcorespositive<-as.data.frame(temp.dd$numberofcorespositive)
+names(numberofcorespositive)<-"number_of_cores_positive"
+summarytools::view(dfSummary(numberofcorespositive, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Greater CA
+
+```{r number of cores positive 3.Greater CA, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Greater CA.10"), ]
+numberofcorespositive<-as.data.frame(temp.dd$numberofcorespositive)
+names(numberofcorespositive)<-"number_of_cores_positive"
+summarytools::view(dfSummary(numberofcorespositive, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Detroit
+
+```{r number of cores positive 4.Detroit, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Detroit.60"), ]
+numberofcorespositive<-as.data.frame(temp.dd$numberofcorespositive)
+names(numberofcorespositive)<-"number_of_cores_positive"
+summarytools::view(dfSummary(numberofcorespositive, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE ), method = "render")
+rm(temp.dd)
+```
+
+## Louisiana
+
+```{r number of cores positive 5.Louisiana, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Louisiana.40"), ]
+numberofcorespositive<-as.data.frame(temp.dd$numberofcorespositive)
+names(numberofcorespositive)<-"number_of_cores_positive"
+summarytools::view(dfSummary(numberofcorespositive, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE ), method = "render")
+rm(temp.dd)
+```
+
+## Georgia
+
+```{r number of cores positive 6.Georgia, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Georgia.20"), ]
+numberofcorespositive<-as.data.frame(temp.dd$numberofcorespositive)
+names(numberofcorespositive)<-"number_of_cores_positive"
+summarytools::view(dfSummary(numberofcorespositive, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE ), method = "render")
+rm(temp.dd)
+```
+
+## Michigan
+
+```{r number of cores positive 7.Michigan, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Michigan.61"), ]
+numberofcorespositive<-as.data.frame(temp.dd$numberofcorespositive)
+names(numberofcorespositive)<-"number_of_cores_positive"
+summarytools::view(dfSummary(numberofcorespositive, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE ), method = "render")
+rm(temp.dd)
+```
+
+<br>
+
+# EOD PROSTATE PATHOLOGIC EXTENSION  {.tabset}
+
+<br>
+
+- Description: EOD Prostate Pathologic Extension is used to assign pT category for prostate cancer based on radical prostatectomy specimens.
+
+- Rationale: EOD Prostate Pathologic Extension is used in EOD. It was previously collected as Prostate Pathological Extension, and Prostate, CS SSF# 3.
+
+- Codes (See the most current version of EOD (Prostate) (https://staging.seer.cancer.gov/) for rules and site-specific codes and coding structures.)
+
+- Reference: http://datadictionary.naaccr.org/default.aspx?c=10&Version=18#3919
+
+<br>
+
+## All data
+```{r prostate pathological extension, message=FALSE, results='asis'}
+st_css() #IMPORTANT!
+if("prostatepathologicalextension" %in% varName.list) {
+  prostatepathologicalextension <- as.factor(trimws(d[,"prostatepathologicalextension"]))
+  levels(prostatepathologicalextension) <- list(T2.300="300",
+                                T4_600.600="600",
+                                TX_900.900="900", 
+                                T3.500="500",
+                                T3a.350="350",
+                                T3b.400="400",
+                                T4_700.700 = "700",
+                                TX_950.950 = "950",
+                                In_situ_88.0 = "0",
+                                T0.800 = "800",
+                                Not_found_250.250 = "250"
+                                )
+    new.d <- data.frame(new.d, prostatepathologicalextension)
+    new.d <- apply_labels(new.d, prostatepathologicalextension = "Grade of primary tumor before any treatment")
+    #summary(new.d$prostatepathologicalextension)
+}
+temp.d <- data.frame (new.d.1, prostatepathologicalextension)
+summarytools::view(dfSummary(new.d$prostatepathologicalextension, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE ), method = "render")
+```
+
+## LA County
+
+```{r prostate pathological extension 1.LA County, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Los Angeles County.80"), ]
+prostatepathologicalextension<-as.data.frame(temp.dd$prostatepathologicalextension)
+names(prostatepathologicalextension)<-"prostate_pathological_extension"
+summarytools::view(dfSummary(prostatepathologicalextension, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE ), method = "render")
+rm(temp.dd)
+```
+
+## Northern CA
+
+```{r prostate pathological extension 2.Northern CA, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Northern CA.30"), ]
+prostatepathologicalextension<-as.data.frame(temp.dd$prostatepathologicalextension)
+names(prostatepathologicalextension)<-"prostate_pathological_extension"
+summarytools::view(dfSummary(prostatepathologicalextension, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE ), method = "render")
+rm(temp.dd)
+```
+
+## Greater CA
+
+```{r prostate pathological extension 3.Greater CA, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Greater CA.10"), ]
+prostatepathologicalextension<-as.data.frame(temp.dd$prostatepathologicalextension)
+names(prostatepathologicalextension)<-"prostate_pathological_extension"
+summarytools::view(dfSummary(prostatepathologicalextension, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE ), method = "render")
+rm(temp.dd)
+```
+
+## Detroit
+
+```{r prostate pathological extension 4.Detroit, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Detroit.60"), ]
+prostatepathologicalextension<-as.data.frame(temp.dd$prostatepathologicalextension)
+names(prostatepathologicalextension)<-"prostate_pathological_extension"
+summarytools::view(dfSummary(prostatepathologicalextension, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE ), method = "render")
+rm(temp.dd)
+```
+
+## Louisiana
+
+```{r prostate pathological extension 5.Louisiana, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Louisiana.40"), ]
+prostatepathologicalextension<-as.data.frame(temp.dd$prostatepathologicalextension)
+names(prostatepathologicalextension)<-"prostate_pathological_extension"
+summarytools::view(dfSummary(prostatepathologicalextension, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE ), method = "render")
+rm(temp.dd)
+```
+
+## Georgia
+
+```{r prostate pathological extension 6.Georgia, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Georgia.20"), ]
+prostatepathologicalextension<-as.data.frame(temp.dd$prostatepathologicalextension)
+names(prostatepathologicalextension)<-"prostate_pathological_extension"
+summarytools::view(dfSummary(prostatepathologicalextension, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE ), method = "render")
+rm(temp.dd)
+```
+
+## Michigan
+
+```{r prostate pathological extension 7.Michigan, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Michigan.61"), ]
+prostatepathologicalextension<-as.data.frame(temp.dd$prostatepathologicalextension)
+names(prostatepathologicalextension)<-"prostate_pathological_extension"
+summarytools::view(dfSummary(prostatepathologicalextension, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE ), method = "render")
+rm(temp.dd)
+```
+
+<br>
+
+# PSA (PROSTATIC SPECIFIC ANTIGEN) LAB VALUE  {.tabset}
+
+<br>
+
+- Description: PSA (Prostatic Specific Antigen) is a protein produced by cells of the prostate gland and is elevated in patients with prostate cancer. This data item pertains to PSA lab value.
+- Rationale: This data item is required for prognostic stage grouping in AJCC 8th edition, Chapter 58, Prostate. It was previously collected as Prostate, CS SSF# 1.
+- Codes
+   + 0.1	0.1 or less nanograms/milliliter (ng/ml) (Exact value to nearest tenth of ng/ml)
+   + 0.2-999.9	0.2–999.9 ng/ml (Exact value to nearest tenth of ng/ml)
+   + XXX.1	1,000 ng/ml or greater
+   + XXX.7	Test ordered, results not in chart
+   + XXX.9	Not documented in medical record/PSA lab value not assessed or unknown if assessed
+
+- Each Site-Specific Data Item (SSDI) applies only to selected primary sites, histologies, and years of diagnosis. Depending on applicability and standard-setter requirements, SSDIs may be left blank.
+
+- Reference: http://datadictionary.naaccr.org/default.aspx?c=10&Version=18#3920
+
+<br>
+
+## All data
+```{r PSA LAB value, message=FALSE, results='asis'}
+st_css() #IMPORTANT!
+if("psalabvalue" %in% varName.list) {
+  psalabvalue <- trimws(d[,"psalabvalue"])
+  #psalabvalue[ which(psalabvalue=="XXX.1")]<-"10001"
+  #psalabvalue[ which(psalabvalue=="XXX.7")]<-"10007"
+  #psalabvalue[ which(psalabvalue=="XXX.9")]<-"10009"
+  psalabvalue<-as.factor(psalabvalue)
+  
+  psalabvalue <- ifelse(psalabvalue=="XXX.9", NA,
+                           ifelse(psalabvalue=="XXX.7", NA,
+                                  ifelse(psalabvalue=="XXX.1", 1000, psalabvalue)))
+  psalabvalue <- as.numeric(psalabvalue)
+    
+    new.d <- data.frame(new.d, psalabvalue)
+    new.d <- apply_labels(new.d, psalabvalue = "PSA_lab_value")
+    #summary(new.d$psalabvalue)
+}
+temp.d <- data.frame (new.d.1, psalabvalue)
+summarytools::view(dfSummary(new.d$psalabvalue, style = 'grid', max.distinct.values = 1000, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE ), method = "render")
+```
+
+## LA County
+
+```{r pPSA LAB value 1.LA County,echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Los Angeles County.80"), ]
+psalabvalue<-as.data.frame(temp.dd$psalabvalue)
+names(psalabvalue)<-"psa_lab_value"
+summarytools::view(dfSummary(psalabvalue, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE ), method = "render")
+rm(temp.dd)
+```
+
+## Northern CA
+
+```{r PSA LAB value 2.Northern CA,echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Northern CA.30"), ]
+psalabvalue<-as.data.frame(temp.dd$psalabvalue)
+names(psalabvalue)<-"psa_lab_value"
+summarytools::view(dfSummary(psalabvalue, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE ), method = "render")
+rm(temp.dd)
+```
+
+## Greater CA
+
+```{r PSA LAB value 3.Greater CA,echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Greater CA.10"), ]
+psalabvalue<-as.data.frame(temp.dd$psalabvalue)
+names(psalabvalue)<-"psa_lab_value"
+summarytools::view(dfSummary(psalabvalue, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE ), method = "render")
+rm(temp.dd)
+```
+
+## Detroit
+
+```{r PSA LAB value 4.Detroit,echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Detroit.60"), ]
+psalabvalue<-as.data.frame(temp.dd$psalabvalue)
+names(psalabvalue)<-"psa_lab_value"
+summarytools::view(dfSummary(psalabvalue, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE , headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Louisiana
+
+```{r PSA LAB value 5.Louisiana,echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Louisiana.40"), ]
+psalabvalue<-as.data.frame(temp.dd$psalabvalue)
+names(psalabvalue)<-"psa_lab_value"
+summarytools::view(dfSummary(psalabvalue, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE , headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Georgia
+
+```{r PSA LAB value 6.Georgia,echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Georgia.20"), ]
+psalabvalue<-as.data.frame(temp.dd$psalabvalue)
+names(psalabvalue)<-"psa_lab_value"
+summarytools::view(dfSummary(psalabvalue, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE , headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Michigan
+
+```{r PSA LAB value 7.Michigan,echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Michigan.61"), ]
+psalabvalue<-as.data.frame(temp.dd$psalabvalue)
+names(psalabvalue)<-"psa_lab_value"
+summarytools::view(dfSummary(psalabvalue, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE ), method = "render")
+rm(temp.dd)
+```
+
+<br>
+
+
+```{r final summary, message=FALSE,echo=FALSE}
+# summarytools::view(dfSummary(new.d, style = 'grid', max.distinct.values = 100), method="browser", report.title="All Data")
+# lapply(unique(new.d$siteid), FUN=function(loc) { summarytools::view(dfSummary(new.d[new.d$siteid==loc,], style = 'grid', max.distinct.values = 100), method="browser", report.title = as.character(loc))})
+```

@@ -1,0 +1,224 @@
+respondid	siteid	maritalstatusatdx	ageatdiagnosis	dateofbirth	grade	rxsummsurgprimsite	cssitespecificfactor7	cssitespecificfactor8	cssitespecificfactor1	derivedajcc7t
+61100225	Detroit.60	Married.2	55	10/15/56	Grade_II.2	None.0	33	6	4.3	180
+61100053	Detroit.60	Single.1	55	4/15/56	Grade_II.2	Resection.20	33	6	7.6	230
+80100066	Los Angeles County.80	Married.2	53	2/15/61	Grade_III.3	Resection.20	34	7	24.6	320
+80100170	Los Angeles County.80	Married.2	55	6/15/60	Grade_II.2	Resection.20	34	7	6.5	310
+80100345	Los Angeles County.80	Divorced.4	63	7/15/52	Grade_II.2	Resection.20	43	7	17.9	320
+80100601	Los Angeles County.80	Single.1	64	1/15/52	Grade_II.2	None.0	34	7	9.8	NA
+61100137	Detroit.60	Married.2	43	5/15/69	Grade_II.2	None.0	33	6	19.6	299
+61100189	Detroit.60	Married.2	62	5/15/50	Grade_III.3	Resection.20	43	7	5.1	230
+10100239	Greater CA.10	Married.2	57	7/15/57	Grade_III.3	Resection.20	44	8	6.9	230
+10100462	Greater CA.10	Single.1	69	8/15/45	Grade_II.2	Resection.20	34	7	5.9	230
+10100218	Greater CA.10	Married.2	52	6/15/62	Grade_III.3	Resection.20	33	6	5.2	230
+10100360	Greater CA.10	Single.1	54	8/15/60	Grade_III.3	None.0	54	9	5.5	180
+10100085	Greater CA.10	Married.2	58	3/15/57	Grade_II.2	Resection.20	34	7	5.5	230
+10100520	Greater CA.10	Single.1	70	1/15/45	Grade_III.3	None.0	45	9	10.9	180
+10100478	Greater CA.10	Married.2	59	8/15/55	Grade_II.2	Resection.20	34	7	8.7	310
+10100054	Greater CA.10	Married.2	51	10/15/63	Grade_II.2	Resection.20	33	6	5	230
+61100454	Detroit.60	Single.1	69	1/15/44	Grade_III.3	Resection.20	43	7	4.5	230
+10100291	Greater CA.10	Married.2	58	5/15/56	Grade_III.3	None.0	45	9	94.5	230
+61100267	Detroit.60	Married.2	62	8/15/50	Grade_III.3	Resection.20	34	7	NA	230
+61100474	Detroit.60	Married.2	57	12/15/55	Grade_III.3	Resection.20	34	7	17.9	230
+10100083	Greater CA.10	Married.2	71	2/15/44	Grade_I.1	None.0	33	6	5.9	180
+61100275	Detroit.60	Married.2	71	11/15/41	Grade_III.3	Resection.20	34	7	0.5	120
+10100366	Greater CA.10	Single.1	55	3/15/60	Grade_III.3	Resection.20	44	8	17.6	230
+10100093	Greater CA.10	Married.2	64	5/15/51	Grade_III.3	Resection.20	44	8	3.2	230
+10100437	Greater CA.10	Divorced.4	53	7/15/62	Grade_II.2	Resection.20	43	7	4.4	299
+10100884	Greater CA.10	Single.1	63	10/15/52	Grade_III.3	None.0	45	9	39.5	NA
+10100829	Greater CA.10	Married.2	59	1/15/57	Grade_III.3	Resection.20	45	9	8.9	NA
+10100121	Greater CA.10	Married.2	73	6/15/42	Grade_II.2	None.0	34	7	5.1	180
+10101028	Greater CA.10	Married.2	56	12/15/59	Grade_III.3	Resection.20	34	7	4.5	NA
+10100653	Greater CA.10	Married.2	64	4/15/51	Grade_II.2	Resection.20	33	6	6.9	NA
+10100816	Greater CA.10	Single.1	61	6/15/55	Grade_II.2	Resection.20	33	6	19.3	NA
+10100587	Greater CA.10	Single.1	63	4/15/53	Grade_III.3	None.0	35	8	13.1	NA
+10101058	Greater CA.10	NA	68	4/15/48	Grade_II.2	Resection.20	34	7	6.2	NA
+10100630	Greater CA.10	Single.1	56	1/15/60	Grade_III.3	Resection.20	45	9	21.5	NA
+10100973	Greater CA.10	Married.2	66	11/15/49	Grade_II.2	Resection.20	33	6	6.2	NA
+10100594	Greater CA.10	Married.2	59	2/15/57	Grade_II.2	Resection.20	34	7	4.1	NA
+10100801	Greater CA.10	Separated.3	55	9/15/61	Grade_III.3	Resection.20	44	8	4.9	NA
+10100754	Greater CA.10	Married.2	61	1/15/55	Grade_II.2	Resection.20	34	7	2	NA
+10100899	Greater CA.10	Widowed.5	69	7/15/46	Grade_III.3	None.0	44	8	NA	NA
+10100952	Greater CA.10	Single.1	55	10/15/61	Grade_III.3	Resection.20	45	9	6.1	NA
+10100615	Greater CA.10	Married.2	69	10/15/47	Grade_III.3	Resection.20	45	9	4.7	NA
+60100327	Detroit.60	Married.2	57	4/15/57	Grade_II.2	Resection.20	43	7	10.1	310
+10100712	Greater CA.10	NA	61	3/15/54	Grade_III.3	None.0	55	10	0.7	180
+10100573	Greater CA.10	Married.2	65	11/15/50	Grade_I.1	Resection.20	NA	6	NA	NA
+60101642	Detroit.60	Single.1	64	4/15/51	Grade_I.1	None.0	33	6	29.7	NA
+60100604	Detroit.60	Separated.3	58	9/15/57	Grade_III.3	Resection.20	45	9	30.2	NA
+60100347	Detroit.60	Single.1	66	5/15/50	Grade_II.2	Resection.20	34	7	6.4	NA
+60100657	Detroit.60	Single.1	54	8/15/62	Grade_III.3	Resection.20	43	7	44	NA
+60101303	Detroit.60	NA	56	2/15/61	Grade_II.2	Resection.20	34	7	4.4	NA
+30100048	Northern CA.30	Married.2	59	8/7/56	Grade_I.1	None.0	33	6	7.6	299
+30100328	Northern CA.30	Single.1	74	12/31/41	Grade_II.2	None.0	34	7	30.3	NA
+60100948	Detroit.60	Married.2	58	2/15/59	Grade_II.2	Resection.20	43	7	4.1	NA
+60100906	Detroit.60	Single.1	53	11/15/63	Grade_III.3	Resection.20	44	8	3.7	NA
+60102226	Detroit.60	Divorced.4	59	8/15/58	NA	Resection.20	NA	NA	NA	NA
+60101724	Detroit.60	Separated.3	55	5/15/62	NA	Resection.20	NA	NA	NA	NA
+60101463	Detroit.60	Single.1	64	6/15/53	NA	Resection.20	NA	NA	NA	NA
+60101922	Detroit.60	Single.1	65	3/15/53	NA	Resection.20	NA	NA	NA	NA
+60102354	Detroit.60	Single.1	60	11/15/57	NA	Resection.20	NA	NA	NA	NA
+60101518	Detroit.60	Married.2	62	7/15/55	NA	Resection.20	NA	NA	NA	NA
+60101950	Detroit.60	Single.1	62	7/15/56	NA	Resection.20	NA	NA	NA	NA
+40101323	Louisiana.40	Married.2	78	8/23/37	Grade_II.2	None.0	34	7	6.5	NA
+40101302	Louisiana.40	Separated.3	59	10/10/56	Grade_II.2	Resection.20	33	6	3.6	NA
+40100930	Louisiana.40	Separated.3	71	10/30/44	Grade_II.2	None.0	34	7	12	NA
+40101123	Louisiana.40	Married.2	64	11/8/51	Grade_I.1	None.0	33	6	4.8	NA
+40101013	Louisiana.40	Married.2	63	1/5/53	Grade_I.1	None.0	33	6	4.2	NA
+10100081	Greater CA.10	Single.1	52	4/15/62	Grade_II.2	None.0	34	7	46.1	180
+40101018	Louisiana.40	Divorced.4	65	6/1/51	Grade_I.1	None.0	33	6	9.3	NA
+40100288	Louisiana.40	Single.1	57	9/14/57	Grade_III.3	None.0	44	8	18.7	180
+40100847	Louisiana.40	Married.2	74	7/16/41	Grade_III.3	Resection.20	44	8	5.2	NA
+40100889	Louisiana.40	Single.1	58	2/3/57	Grade_II.2	None.0	43	7	4.7	180
+40800038	Louisiana.40	Divorced.4	69	11/5/45	Grade_III.3	Resection.20	NA	10	8.7	210
+40100133	Louisiana.40	Single.1	60	12/8/54	Grade_III.3	None.0	45	9	8.7	210
+40100194	Louisiana.40	Married.2	68	2/27/46	Grade_II.2	Resection.20	43	7	6.7	320
+40100002	Louisiana.40	Single.1	60	7/18/55	Grade_III.3	Resection.20	43	7	5.1	230
+40100176	Louisiana.40	Widowed.5	73	5/21/41	Grade_II.2	Resection.20	34	7	3.8	320
+40100191	Louisiana.40	Married.2	58	12/19/56	Grade_III.3	Resection.20	44	8	7.4	180
+40100047	Louisiana.40	Married.2	63	8/28/51	Grade_II.2	Resection.20	43	7	6.1	230
+40100063	Louisiana.40	Single.1	69	12/4/45	Grade_III.3	Resection.20	43	7	13.4	320
+40100337	Louisiana.40	Single.1	54	6/3/61	Grade_II.2	Resection.20	33	6	7.7	310
+40100031	Louisiana.40	Married.2	63	12/2/51	Grade_III.3	Resection.20	35	8	5.6	310
+40100837	Louisiana.40	Married.2	55	11/28/60	Grade_II.2	Resection.20	34	7	5	NA
+40100736	Louisiana.40	Married.2	71	6/26/44	Grade_III.3	None.0	44	8	5	NA
+40100752	Louisiana.40	Married.2	67	1/27/49	Grade_III.3	Resection.20	44	8	5.9	NA
+40100437	Louisiana.40	Married.2	67	4/20/49	Grade_II.2	Resection.20	34	7	7.8	NA
+40100999	Louisiana.40	Married.2	55	8/9/61	Grade_II.2	None.0	34	7	4.4	NA
+40100842	Louisiana.40	Married.2	66	6/25/49	Grade_II.2	Resection.20	33	6	5.6	NA
+40100589	Louisiana.40	Married.2	60	11/8/55	Grade_II.2	None.0	43	7	6.2	NA
+40100589	Louisiana.40	Married.2	60	11/8/55	Grade_II.2	None.0	43	7	6.2	NA
+40100803	Louisiana.40	Married.2	60	2/4/56	Grade_II.2	Resection.20	34	7	11.3	NA
+40100595	Louisiana.40	Single.1	59	2/25/57	Grade_II.2	Resection.20	34	7	13.8	NA
+40100587	Louisiana.40	Widowed.5	74	12/8/42	Grade_III.3	None.0	44	8	5.4	NA
+40100175	Louisiana.40	Married.2	58	5/30/57	Grade_III.3	None.0	45	9	4.6	180
+40100361	Louisiana.40	Single.1	52	12/21/62	Grade_III.3	None.0	54	9	22.7	220
+40100067	Louisiana.40	NA	72	1/10/43	Grade_II.2	Resection.20	43	7	22.6	230
+40100367	Louisiana.40	Married.2	56	5/30/59	Grade_II.2	Resection.20	33	6	6.1	230
+40100334	Louisiana.40	Single.1	59	1/17/56	Grade_II.2	Resection.20	34	7	NA	230
+40100309	Louisiana.40	Divorced.4	66	3/14/49	Grade_II.2	Resection.20	34	7	4.7	230
+40100036	Louisiana.40	Divorced.4	57	11/21/57	Grade_I.1	Resection.20	33	6	4	230
+40100362	Louisiana.40	Married.2	56	8/2/58	Grade_I.1	Resection.20	33	6	4.1	230
+40100026	Louisiana.40	Married.2	51	1/31/63	Grade_II.2	Resection.20	34	7	NA	230
+40100740	Louisiana.40	Married.2	55	12/23/60	Grade_II.2	Resection.20	34	7	6.9	NA
+40100656	Louisiana.40	Married.2	62	10/25/53	Grade_III.3	Resection.20	44	8	7.1	NA
+40100082	Louisiana.40	Divorced.4	59	7/12/56	Grade_I.1	Resection.20	33	6	NA	230
+40100681	Louisiana.40	Single.1	54	4/29/61	Grade_II.2	Resection.20	43	7	63.9	NA
+40100023	Louisiana.40	Married.2	60	2/28/55	Grade_II.2	Resection.20	34	7	4.4	230
+40100658	Louisiana.40	Divorced.4	58	4/27/57	Grade_III.3	Resection.20	45	9	7.5	NA
+40100476	Louisiana.40	Married.2	53	1/29/63	Grade_III.3	Resection.20	44	8	10.3	NA
+40100748	Louisiana.40	Widowed.5	55	3/25/61	Grade_III.3	Resection.20	44	8	9	NA
+40100780	Louisiana.40	Married.2	61	7/2/54	Grade_II.2	Resection.20	34	7	8.3	NA
+40100424	Louisiana.40	Married.2	67	10/13/49	Grade_II.2	Resection.20	34	7	7.9	NA
+40100764	Louisiana.40	Single.1	72	11/3/43	Grade_II.2	Resection.20	34	7	4.9	NA
+40100530	Louisiana.40	NA	62	7/30/54	Grade_III.3	Resection.20	45	9	9.8	NA
+40100523	Louisiana.40	Married.2	68	11/26/47	Grade_III.3	None.0	44	8	98	NA
+40100262	Louisiana.40	Widowed.5	58	11/29/56	Grade_II.2	Resection.20	34	7	11.2	230
+40100918	Louisiana.40	Married.2	59	11/3/56	Grade_I.1	Resection.20	33	6	4.4	NA
+40100954	Louisiana.40	Married.2	54	4/23/62	Grade_I.1	None.0	33	6	3.3	NA
+40100759	Louisiana.40	Separated.3	66	1/7/50	Grade_II.2	Resection.20	34	7	4.8	NA
+40100674	Louisiana.40	Married.2	60	2/16/55	Grade_III.3	Resection.20	44	8	3.8	NA
+40100695	Louisiana.40	Married.2	65	9/24/50	Grade_II.2	Resection.20	43	7	4.5	NA
+40100806	Louisiana.40	Divorced.4	68	2/5/48	Grade_II.2	Resection.20	43	7	4.6	NA
+40100480	Louisiana.40	Married.2	59	8/17/57	Grade_II.2	Resection.20	43	7	4.1	NA
+40100584	Louisiana.40	Married.2	66	2/4/50	Grade_III.3	None.0	44	8	12.9	NA
+40100789	Louisiana.40	Married.2	65	6/16/51	Grade_II.2	Resection.20	34	7	7.4	NA
+40100472	Louisiana.40	Single.1	59	1/29/57	Grade_II.2	Resection.20	34	7	30.4	NA
+40100050	Louisiana.40	Married.2	59	4/7/56	Grade_II.2	Resection.20	33	6	7.2	310
+40100257	Louisiana.40	NA	64	10/29/50	Grade_II.2	Resection.20	43	7	6.7	320
+40100197	Louisiana.40	Married.2	62	4/13/53	Grade_III.3	None.0	45	9	7.7	180
+40100253	Louisiana.40	Married.2	47	12/20/67	Grade_III.3	Resection.20	35	8	4.1	230
+40100049	Louisiana.40	Married.2	67	1/5/48	Grade_II.2	Resection.20	34	7	4.1	230
+40100439	Louisiana.40	NA	53	8/30/63	Grade_II.2	Resection.20	33	6	40.6	NA
+40100354	Louisiana.40	Married.2	61	1/18/54	Grade_III.3	Resection.20	54	9	5.7	320
+40100307	Louisiana.40	Single.1	58	3/8/56	Grade_II.2	Resection.20	34	7	4.1	230
+40100077	Louisiana.40	Married.2	68	3/9/46	Grade_III.3	Resection.20	45	9	NA	150
+40100804	Louisiana.40	Married.2	69	9/14/47	Grade_III.3	Resection.20	45	9	6.6	NA
+20100823	Georgia.20	Married.2	67	8/24/49	Grade_III.3	Resection.20	44	8	8.8	310
+20100830	Georgia.20	Married.2	64	10/2/51	Grade_II.2	None.0	43	7	13.8	180
+20100811	Georgia.20	Single.1	67	3/19/47	Grade_II.2	Resection.20	43	7	12	320
+20100747	Georgia.20	Married.2	62	11/27/52	Grade_III.3	Resection.20	44	8	24.7	320
+20100745	Georgia.20	Married.2	61	4/14/54	Grade_II.2	None.0	43	7	4.8	180
+20102088	Georgia.20	NA	64	1/28/51	Grade_I.1	None.0	33	6	4.7	180
+20100229	Georgia.20	Married.2	71	5/17/43	Grade_III.3	None.0	54	9	59	180
+20100260	Georgia.20	Married.2	69	8/29/45	Grade_III.3	None.0	54	9	5.1	320
+20102135	Georgia.20	Married.2	57	11/2/57	Grade_I.1	Resection.20	33	6	3.5	230
+20100346	Georgia.20	NA	61	8/21/53	Grade_III.3	None.0	44	8	4.7	180
+20100635	Georgia.20	NA	69	5/13/46	Grade_II.2	Resection.20	43	7	6.2	180
+20100350	Georgia.20	NA	69	6/23/46	Grade_III.3	Resection.20	45	9	7.7	230
+20102220	Georgia.20	NA	74	12/13/40	Grade_I.1	None.0	33	6	8.9	180
+20100463	Georgia.20	Married.2	61	7/28/53	Grade_II.2	Resection.20	43	7	9.6	230
+20100066	Georgia.20	Married.2	62	7/18/52	Grade_II.2	None.0	43	7	8.6	180
+20100101	Georgia.20	Married.2	53	3/15/62	Grade_II.2	Resection.20	34	7	6.4	230
+20100708	Georgia.20	Separated.3	58	10/5/57	Grade_III.3	Resection.20	45	9	23.8	320
+20100851	Georgia.20	Married.2	65	6/7/50	Grade_III.3	None.0	44	8	12.6	180
+20102544	Georgia.20	Divorced.4	62	8/21/52	Grade_II.2	None.0	34	7	26.9	180
+20100782	Georgia.20	Married.2	48	11/9/66	Grade_II.2	Resection.20	34	7	10	320
+20100890	Georgia.20	Separated.3	63	9/1/52	Grade_II.2	Resection.20	43	7	6.5	230
+20100105	Georgia.20	Married.2	59	2/7/56	Grade_II.2	Resection.20	34	7	4.9	230
+20100613	Georgia.20	NA	66	4/28/49	Grade_II.2	Resection.20	34	7	4.4	230
+20100996	Georgia.20	Married.2	64	6/21/51	Grade_II.2	Resection.20	34	7	41.9	320
+20101017	Georgia.20	Single.1	57	5/14/59	Grade_II.2	None.0	43	7	25.1	299
+20100403	Georgia.20	Single.1	54	12/27/60	Grade_II.2	Resection.20	34	7	7	310
+20101030	Georgia.20	Married.2	56	5/30/60	Grade_II.2	Resection.20	43	7	5.7	230
+20101068	Georgia.20	Divorced.4	59	12/8/56	Grade_II.2	Resection.20	34	7	8.1	210
+20101082	Georgia.20	Divorced.4	63	3/15/53	Grade_II.2	Resection.20	34	7	7.2	230
+20101089	Georgia.20	Married.2	58	6/2/58	Grade_II.2	Resection.20	43	7	4.8	230
+20101111	Georgia.20	Single.1	51	8/31/64	Grade_II.2	Resection.20	34	7	4.7	230
+20101264	Georgia.20	Married.2	46	4/30/70	Grade_II.2	Resection.20	34	7	5.7	230
+20101237	Georgia.20	Divorced.4	56	3/6/60	Grade_II.2	Resection.20	43	7	24.9	310
+20101266	Georgia.20	Married.2	57	10/21/58	Grade_II.2	Resection.20	34	7	25	230
+20101348	Georgia.20	Divorced.4	63	3/8/53	Grade_III.3	None.0	45	9	98	180
+20101360	Georgia.20	Married.2	64	1/28/52	Grade_III.3	Resection.20	44	8	6.9	310
+20101442	Georgia.20	Married.2	60	9/23/56	Grade_III.3	None.0	45	9	9	180
+20103388	Georgia.20	NA	58	9/17/57	Grade_I.1	None.0	33	6	5	NA
+20103429	Georgia.20	Single.1	69	12/8/46	Grade_I.1	None.0	33	6	23.4	180
+20101502	Georgia.20	Married.2	65	6/4/51	Grade_II.2	Resection.20	33	6	6	230
+20101580	Georgia.20	NA	52	9/18/63	Grade_II.2	Resection.20	34	7	10.7	230
+20101598	Georgia.20	Married.2	68	11/26/48	Grade_II.2	Resection.20	43	7	5.8	310
+20101646	Georgia.20	Married.2	61	3/16/55	Grade_II.2	Resection.20	34	7	0.6	230
+61100037	Michigan.61	Married.2	59	4/15/52	Grade_II.2	None.0	33	6	9	180
+61100076	Michigan.61	Married.2	58	8/15/53	Grade_II.2	None.0	NA	6	NA	299
+61100136	Michigan.61	Single.1	62	6/15/49	Grade_III.3	Resection.20	34	7	14.8	230
+61100166	Michigan.61	Married.2	56	1/15/56	Grade_III.3	Resection.20	43	7	7.1	230
+61100001	Michigan.61	Married.2	55	10/15/56	Grade_III.3	None.0	34	7	19.8	299
+61100430	Michigan.61	Widowed.5	56	12/15/56	Grade_III.3	Resection.20	33	6	3.9	310
+61100412	Michigan.61	Married.2	58	7/15/55	Grade_II.2	Resection.20	43	7	NA	230
+60100016	Detroit.60	Single.1	54	8/15/60	Grade_II.2	Resection.20	34	7	13	230
+60100155	Detroit.60	Single.1	59	9/15/55	Grade_III.3	Resection.20	44	8	NA	320
+60100123	Detroit.60	Single.1	57	9/15/57	Grade_II.2	Resection.20	34	7	4.5	310
+60100106	Detroit.60	Married.2	63	7/15/51	Grade_II.2	Resection.20	34	7	3.3	230
+60100060	Detroit.60	Single.1	50	10/15/64	Grade_III.3	Resection.20	45	9	7.7	320
+60100061	Detroit.60	NA	54	10/15/60	Grade_II.2	Resection.20	34	7	5.5	230
+60100170	Detroit.60	Married.2	70	6/15/45	Grade_II.2	Resection.20	34	7	9.6	320
+60100272	Detroit.60	Single.1	56	12/15/58	Grade_II.2	None.0	43	7	4.4	180
+60100087	Detroit.60	Separated.3	59	12/15/55	Grade_II.2	Resection.20	43	7	8.8	210
+60100238	Detroit.60	Married.2	61	10/15/54	Grade_II.2	Resection.20	43	7	9.5	230
+60100224	Detroit.60	Widowed.5	56	7/15/58	Grade_II.2	None.0	43	7	3.3	299
+60100528	Detroit.60	Single.1	56	7/15/59	Grade_II.2	Resection.20	34	7	19	NA
+60100589	Detroit.60	Single.1	61	9/15/54	Grade_II.2	Resection.20	43	7	17	NA
+60100365	Detroit.60	Married.2	58	4/15/57	Grade_II.2	Resection.20	43	7	5.3	NA
+60100274	Detroit.60	Married.2	60	8/15/55	Grade_II.2	Resection.20	NA	7	0.6	230
+60100408	Detroit.60	Married.2	55	10/15/60	Grade_III.3	Resection.20	44	8	8.1	NA
+60100159	Detroit.60	Married.2	50	2/15/65	Grade_I.1	Resection.20	33	6	5.5	230
+60101557	Detroit.60	Single.1	60	2/15/56	Grade_I.1	None.0	33	6	4.6	NA
+60100355	Detroit.60	Single.1	58	3/15/58	Grade_III.3	Resection.20	44	8	4.9	NA
+60100650	Detroit.60	Married.2	54	6/15/62	Grade_III.3	Resection.20	34	7	6.7	NA
+60101036	Detroit.60	Married.2	58	4/15/59	Grade_II.2	Resection.20	43	7	9	NA
+60101037	Detroit.60	Divorced.4	48	2/15/69	Grade_II.2	Resection.20	34	7	3.2	NA
+60101241	Detroit.60	Married.2	67	9/15/49	Grade_II.2	Resection.20	34	7	4.2	NA
+60100974	Detroit.60	NA	52	8/15/64	Grade_III.3	Resection.20	44	8	21.8	NA
+60100937	Detroit.60	NA	45	11/15/71	Grade_III.3	Resection.20	53	8	5.2	NA
+60100943	Detroit.60	Single.1	64	8/15/52	Grade_II.2	Resection.20	34	7	4.4	NA
+60100686	Detroit.60	Single.1	66	9/15/51	Grade_II.2	Resection.20	33	6	4.2	NA
+60100737	Detroit.60	Divorced.4	58	8/15/58	Grade_II.2	Resection.20	34	7	76	NA
+60101142	Detroit.60	NA	67	11/15/49	Grade_II.2	Resection.20	43	7	5.7	NA
+60100696	Detroit.60	Married.2	61	4/15/56	Grade_II.2	Resection.20	34	7	7.1	NA
+60102015	Detroit.60	Single.1	58	6/15/59	NA	Resection.20	NA	NA	NA	NA
+60101913	Detroit.60	Married.2	63	9/15/54	NA	Resection.20	NA	NA	NA	NA
+40101253	Louisiana.40	Married.2	69	1/2/47	Grade_I.1	None.0	33	6	5.7	NA
+40101347	Louisiana.40	Married.2	59	3/18/57	Grade_I.1	None.0	33	6	4.5	NA
+40101017	Louisiana.40	Married.2	68	1/31/48	Grade_I.1	None.0	33	6	4.3	NA
+40101272	Louisiana.40	Married.2	60	7/11/55	Grade_I.1	Resection.20	33	6	2.1	NA
+40100996	Louisiana.40	Married.2	59	7/30/57	Grade_II.2	Resection.20	33	6	4.9	NA
+40100978	Louisiana.40	Married.2	64	9/8/51	Grade_I.1	None.0	33	6	6.6	NA
+40100945	Louisiana.40	Married.2	60	9/20/56	Grade_I.1	Resection.20	33	6	11.7	NA

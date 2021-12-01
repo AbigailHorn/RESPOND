@@ -1,0 +1,866 @@
+---
+title: "RESPOND Data Investigation"
+author: "Weijia Hu"
+date: "`r Sys.time()`"
+output:
+  html_document:
+    df_print: paged
+    code_folding: hide
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+require("RPostgreSQL") # for PostgreSQL
+library(zoo) # for date conversion
+library(expss) # for labels
+library(DBI) # for Database connectivity
+library(summarytools) # for summarizing variables
+library(tidyverse)
+library(plyr)
+library(knitr) # for creating tables
+
+# set working directory
+#setwd 
+("~/Google Drive File Stream/My Drive/Projects/RESPOND/CORE D/InitalDataCleaning")
+
+```
+
+```{r input survey data}
+load("VSurvAll20210116.Rda")
+d <- VSurvAll
+#print(names(d))
+```
+
+
+```{r first look - survey data - 108 vars, 29 questions}
+varName.list <- names(d)
+varName.list <- c("surveyid","locationname","respondid","methodology",
+                  "a1month","a1year","a1not",
+                  "a2",
+                  "a3_1","a3_2","a3_3","a3_4","a3_5","a3_6","a3_7",
+                  "a3_8","a3_9","a3_10","a3_11","a3_12","a3_13","a3_14","a3_15","a3_16",
+                  "a3_17","a3_18","a3_19","a3_20","a3_21","a3_22","a3_23","a3_24","a3other",
+                  "a4month","a4year",
+                  "a8",
+                  "b3",
+                  "c2a1","c2a2","c2a3",
+                  "c4a1","c4a2","c4a3",
+                  "d1aa","d1ab","d1ba","d1bb","d1ca","d1cb","d1da","d1db","d1ea","d1eb","d1fa","d1fb","d1ga","d1gb",
+                  "d3b1","d3b2","d3b3",
+                  "d4a","d4b","d4c","d4d","d4e","d4f","d4g","d4h","d4i","d4j","d4k","d4l",
+                  "d5a","d5b","d5c","d5d","d5e","d5f","d5g","d5h","d5i","d5j","d5k",
+                  "e11a","e11b","e11c","e11d","e11e","e11f",
+                  "f2lbs","f2kgs",
+                  "f7","f7age","f7a","f7b","f7bage",
+                  "g1","g3","g4a","g5","g7","g8",
+                  "g9a","g9b","g9c",
+                  "g10","g11","g12")
+d <- d[,varName.list]
+#print(names(d))
+new.d <- data.frame(matrix(ncol=0, nrow=nrow(d)))
+new.d.n <- data.frame(matrix(ncol=0, nrow=nrow(d)))
+
+```
+
+# SURVEY ID
+Scantron assigned SurveyID
+```{r survey ID }
+if("surveyid" %in% varName.list) { 
+  surveyid <- as.factor(d[,"surveyid"])
+  isDup <- duplicated(surveyid)
+  numDups <- sum(isDup)
+  dups <- surveyid[isDup]
+  
+  new.d <- data.frame(new.d, surveyid)
+  new.d <- apply_labels(new.d, surveyid = "Survey ID")
+  
+  print(paste("Number of duplicates:", numDups))
+  print("The following are duplicated IDs:")
+  print(dups)
+  print("Number of NAs:")
+  print(sum(is.na(new.d$surveyid)))
+
+}
+
+```
+
+# LOCATION NAME
+Name of Registry delivery location
+```{r location name }
+if("locationname" %in% varName.list) { 
+  locationname <- as.factor(d[,"locationname"])
+  
+  new.d <- data.frame(new.d, locationname)
+  new.d <- apply_labels(new.d, locationname = "Recruitment Location")
+  
+  #locationname_count<-count(new.d$locationname) original one!!!
+  #locationname_count<-as.data.frame(table(new.d$locationname))
+  #To get the number of each registry
+  locationname_count<-count(new.d$locationname)
+  colnames(locationname_count)<- c("Location", "Total")
+  #To get freq of each registry
+  locationname_freq1<-table(new.d$locationname)
+  locationname_freq<-as.data.frame(round(prop.table(locationname_freq1),3))
+  colnames(locationname_freq)<- c("Location", "Freq")
+  #Merge them by "Location"
+  result<-merge(locationname_count,locationname_freq,by="Location")
+  #colnames(locationname_count)<- c("Location", "Total")
+  kable(result, format = "simple", align = 'l', caption = "Overview of Registry delivery location")
+}
+
+```
+
+# RESPOND ID
+From Barcode label put on last page of survey by registries, identifies participant. ResponseID is assigned by the registries.
+```{r respond id }
+if("respondid" %in% varName.list) { 
+  respondid <- as.factor(d[,"respondid"])
+  #remove NAs in respondid in order to avoid showing NAs in duplicated values
+  respondid_rm<-respondid[!is.na(respondid)]
+  isDup <- duplicated(respondid_rm)
+  numDups <- sum(isDup)
+  dups <- respondid_rm[isDup]
+  
+  new.d <- data.frame(new.d, respondid)
+  new.d <- apply_labels(new.d, respondid = "RESPOND ID")
+  
+  print(paste("Number of duplicates:", numDups))
+  print("The following are duplicated IDs:")
+  print(dups)
+  print("Number of NAs:")
+  print(sum(is.na(new.d$respondid)))
+
+}
+```
+
+# METHODOLOGY
+How survey was completed  
+P=Paper
+O=Online complete
+S=Online, started but not complete
+```{r methodology }
+if("methodology" %in% varName.list) { 
+  methodology <- as.factor(d[,"methodology"])
+  levels(methodology) <- list(Paper="P",
+                              Online="O",
+                              Online_not_complete="S")
+  new.d <- data.frame(new.d, methodology)
+  new.d <- apply_labels(new.d, methodology = "Methodology for Survey Completion")
+   
+  #Because the total number of "Online_not_complete" is 0, kable function is unable to show it. So use freq function.
+  print(freq(new.d$methodology, cumul = FALSE, headings = FALSE, style = "rmarkdown"),method = 'render')
+  
+  #methodology_count<-count(new.d$methodology)
+  #colnames(methodology_count)<- c("Methodology", "Total")
+  #kable(methodology_count, format = "simple", align = 'l', caption = "Overview of Methodology")
+}
+
+```
+
+# A1
+A1. In what month and year were you first diagnosed with prostate cancer?
+```{r A1:month diagnosed}
+if("a1month" %in% varName.list) { 
+  a1month <- as.factor(d[,"a1month"])
+  
+  new.d <- data.frame(new.d, a1month)
+  new.d <- apply_labels(new.d, a1month = "Month Diagnosed")
+  
+  print("a1month")
+  #summary(new.d$a1month)
+  print(freq(new.d$a1month, cumul = FALSE, headings = FALSE, style = "grid"),method = 'render')
+}
+
+if("a1year" %in% varName.list) { 
+  tmp<-d[,"a1year"]
+  tmp[tmp=="15"]<-"2015"
+  a1year <- as.factor(tmp)
+  #levels(a1year)[levels(a1year)=="15"] <- "2015"
+  #a1year[a1year=="15"] <- "2015"  # change "15" to "2015"
+  #a1year <- as.Date(a1year, format = "%Y")
+  #a1year <- relevel(a1year, ref="1914")
+
+  new.d <- data.frame(new.d, a1year)
+  new.d <- apply_labels(new.d, a1year = "Year Diagnosed")
+
+  print("a1year")
+  #summary(new.d$a1year)
+  print(freq(new.d$a1year, cumul = FALSE, headings = FALSE, style = "grid"),method = 'render')
+
+}
+
+# 1=I have NEVER had prostate cancer
+# 2=I HAVE or HAVE HAD prostate cancer
+# (paper survey only had a bubble for “never had” so value set to 2 if bubble not marked)"
+if("a1not" %in% varName.list) { 
+  a1not <- as.factor(d[,"a1not"])
+  levels(a1not) <- list(NEVER_had_ProstateCancer="1",
+                         HAVE_had_ProstateCancer="2")
+  new.d <- data.frame(new.d, a1not)
+  new.d <- apply_labels(new.d, a1not = "Not Diagnosed")
+  
+  print("a1not")
+  #summary(new.d$a1not)
+  print(freq(new.d$a1not, cumul = FALSE, style = "rmarkdown"),method = 'render')
+  
+}
+```
+
+# A2
+A2. Do you identify as Black or African American?
+```{r A2:Indentify as Black or African American }
+if("a2" %in% varName.list) { 
+  a2 <- as.factor(d[,"a2"])
+  levels(a2) <- list(Yes="2",
+                     No="1")
+  
+  new.d <- data.frame(new.d, a2)
+  new.d <- apply_labels(new.d, a2 = "Indentify as Black or African American?")
+  
+  #summary(new.d$a2)
+  a2_count<-count(new.d$a2)
+  colnames(a2_count)<- c("Answer", "Total")
+  kable(a2_count, format = "simple", align = 'l', caption = "Answers of A2")
+}
+```
+
+# A3
+"If Yes:
+A3. Which Black or African American group(s) and other races/ethnicities do you identify with? Mark all that apply.
+```{r A3: Black or African American Groups }
+if("a3_1" %in% varName.list) { a3_1 <- factor(d[,"a3_1"], levels=c(1), labels=c("Black/African American")) }
+if("a3_2" %in% varName.list) { a3_2 <- factor(d[,"a3_2"], levels=c(1), labels=c("Nigerian")) }
+if("a3_3" %in% varName.list) { a3_3 <- factor(d[,"a3_3"], levels=c(1), labels=c("Jamaican")) }
+if("a3_4" %in% varName.list) { a3_4 <- factor(d[,"a3_4"], levels=c(1), labels=c("Ethiopian")) }
+if("a3_5" %in% varName.list) { a3_5 <- factor(d[,"a3_5"], levels=c(1), labels=c("Haitian")) }
+if("a3_6" %in% varName.list) { a3_6 <- factor(d[,"a3_6"], levels=c(1), labels=c("Somali")) }
+if("a3_7" %in% varName.list) { a3_7 <- factor(d[,"a3_7"], levels=c(1), labels=c("Guyanese")) }
+if("a3_8" %in% varName.list) { a3_8 <- factor(d[,"a3_8"], levels=c(1), labels=c("Creole")) }
+if("a3_9" %in% varName.list) { a3_9 <- factor(d[,"a3_9"], levels=c(1), labels=c("West Indian")) }
+if("a3_10" %in% varName.list) { a3_10 <- factor(d[,"a3_10"], levels=c(1), labels=c("Caribbean")) }
+if("a3_11" %in% varName.list) { a3_11 <- factor(d[,"a3_11"], levels=c(1), labels=c("White")) }
+if("a3_12" %in% varName.list) { a3_12 <- factor(d[,"a3_12"], levels=c(1), labels=c("Asian/Asian American")) }
+if("a3_13" %in% varName.list) { a3_13 <- factor(d[,"a3_13"], levels=c(1), labels=c("Native American or American Indian or Alaskan Native")) }
+if("a3_14" %in% varName.list) { a3_14 <- factor(d[,"a3_14"], levels=c(1), labels=c("Middle Eastern or North African")) }
+if("a3_15" %in% varName.list) { a3_15 <- factor(d[,"a3_15"], levels=c(1), labels=c("Native Hawaiian or Pacific Islander")) }
+if("a3_16" %in% varName.list) { a3_16 <- factor(d[,"a3_16"], levels=c(1), labels=c("Hispanic")) }
+if("a3_17" %in% varName.list) { a3_17 <- factor(d[,"a3_17"], levels=c(1), labels=c("Latino")) }
+if("a3_18" %in% varName.list) { a3_18 <- factor(d[,"a3_18"], levels=c(1), labels=c("Spanish")) }
+if("a3_19" %in% varName.list) { a3_19 <- factor(d[,"a3_19"], levels=c(1), labels=c("Mexican/Mexican American")) }
+if("a3_20" %in% varName.list) { a3_20 <- factor(d[,"a3_20"], levels=c(1), labels=c("Salvadoran")) }
+if("a3_21" %in% varName.list) { a3_21 <- factor(d[,"a3_21"], levels=c(1), labels=c("Puerto Rican")) }
+if("a3_22" %in% varName.list) { a3_22 <- factor(d[,"a3_22"], levels=c(1), labels=c("Dominican")) }
+if("a3_23" %in% varName.list) { a3_23 <- factor(d[,"a3_23"], levels=c(1), labels=c("Columbian")) }
+if("a3_24" %in% varName.list) { a3_24 <- factor(d[,"a3_24"], levels=c(1), labels=c("Other")) }
+if("a3other" %in% varName.list) { 
+  a3other <- d[,"a3other"]
+  a3other <- as.factor(ifelse(a3other=="NA", NA, a3other))
+}
+
+new.d <- data.frame(new.d, a3_1,a3_2,a3_3,a3_4,a3_5,a3_6,a3_7,
+                  a3_8,a3_9,a3_10,a3_11,a3_12,a3_13,a3_14,a3_15,a3_16,
+                  a3_17,a3_18,a3_19,a3_20,a3_21,a3_22,a3_23,a3_24,a3other)   
+
+```
+
+# A4
+A4. What is your month and year of birth?
+```{r A4: Date of Birth }
+if("a4month" %in% varName.list) { 
+  a4month <- as.factor(d[,"a4month"])
+  
+  new.d <- data.frame(new.d, a4month)
+  new.d <- apply_labels(new.d, a4month = "Month Birth")
+  
+  print("a4month")
+  #summary(new.d$a4month)
+  print(freq(new.d$a4month, cumul = FALSE, headings = FALSE, style = "grid"),method = 'render')
+
+}
+
+if("a4year" %in% varName.list) { 
+  a4year <- as.factor(d[,"a4year"])
+  #summary(as.factor(a4year))
+  #a4year <- as.Date(a4year, c("%Y"))
+  
+  new.d <- data.frame(new.d, a4year)
+  new.d <- apply_labels(new.d, a4year = "Year Birth")
+  
+  print("a4year")
+  #summary(new.d$a4year)
+  print(freq(new.d$a4year, cumul = FALSE, headings = FALSE, style = "grid"),method = 'render')
+
+}
+```
+
+# A8
+A8. How many years have you lived in the United States?
+1=15 years or less  
+2=16-25 years  
+3=My whole life or more than 25 years
+```{r A8: Years in US }
+if("a8" %in% varName.list) { 
+  a8 <- as.factor(d[,"a8"])
+  levels(a8) <- list(lt15="1",
+                     bt_16_25="2",
+                     gt25_life="3")
+  new.d <- data.frame(new.d, a8)
+  new.d <- apply_labels(new.d, a8 = "Years lived in US")
+  
+  #summary(new.d$a8)
+  a8_count<-count(new.d$a8)
+  colnames(a8_count)<- c("Answer", "Total")
+  kable(a8_count, format = "simple", align = 'l', caption = "Answers of A8")
+}
+```
+
+# B3
+B3. In general, how would you rate your current health?  
+1=Excellent  
+2=Very Good  
+3=Good  
+4=Fair  
+5=Poor
+```{r B3: current health }
+if("b3" %in% varName.list) { 
+  b3 <- as.factor(d[,"b3"])
+  levels(b3) <- list(Excellent="1",
+                     Very_Good="2",
+                     Good="3",
+                     Fair="4",
+                     Poor="5")
+  b3 <- ordered(b3, c("Poor", "Fair", "Good", "Very_Good","Excellent"))
+  
+  new.d <- data.frame(new.d, b3)
+  new.d <- apply_labels(new.d, b3 = "Current Health")
+  
+  #summary(new.d$b3)
+  b3_count<-count(new.d$b3)
+  colnames(b3_count)<- c("Answer", "Total")
+  kable(b3_count, format = "simple", align = 'l', caption = "Answers of B3")
+}
+```
+
+# C2
+C2. Please mark answers for each of these statements.	
+a. On average, I felt/feel safe walking in my neighborhood day or night.	
+1=Strongly Agree  
+2=Agree  
+3=Neutral (neither agree nor disagree)  
+4=Disagree  
+5=Strongly Disagree
+```{r C2: safe in neighborhood }
+
+print("Safe in neighborhood")
+if("c2a1" %in% varName.list) { 
+  c2a1 <- as.factor(d[,"c2a1"])  # * gets treated as NA by not including it in levels
+  levels(c2a1) <- list(Strongly_Agree="1",
+                     Agree="2",
+                     Neutral="3",
+                     Disagree="4",
+                     Strongly_Disagree="5")
+  c2a1 <- ordered(c2a1, c("Strongly_Agree", "Agree", "Neutral", "Disagree","Strongly_Disagree"))
+  
+  new.d <- data.frame(new.d, c2a1)
+  new.d <- apply_labels(new.d, c2a1 = "Safe in Neighborhood: Current")
+  
+  #print("Current")
+  #summary(new.d$c2a1)
+  c2a1_count<-count(new.d$c2a1)
+  colnames(c2a1_count)<- c("Answer", "Total")
+  kable(c2a1_count, format = "simple", align = 'l', caption = "1. Current (from prostate cancer diagnosis to present)")
+}
+
+if("c2a2" %in% varName.list) { 
+  c2a2 <- as.factor(d[,"c2a2"])  # * gets treated as NA by not including it in levels
+  levels(c2a2) <- list(Strongly_Agree="1",
+                     Agree="2",
+                     Neutral="3",
+                     Disagree="4",
+                     Strongly_Disagree="5")
+  c2a2 <- ordered(c2a2, c("Strongly_Agree", "Agree", "Neutral", "Disagree","Strongly_Disagree"))
+  
+  new.d <- data.frame(new.d, c2a2)
+  new.d <- apply_labels(new.d, c2a2 = "Safe in Neighborhood: Age 31 up to just before diagnosis")
+  
+  #print("Age 31 up to just before diagnosis")
+  #summary(new.d$c2a2)
+  c2a2_count<-count(new.d$c2a2)
+  colnames(c2a2_count)<- c("Answer", "Total")
+  kable(c2a2_count, format = "simple", align = 'l', caption = "2. Age 31 up to just before prostate cancer diagnosis")
+}
+
+if("c2a3" %in% varName.list) { 
+  c2a3 <- as.factor(d[,"c2a3"])  # * gets treated as NA by not including it in levels
+  levels(c2a3) <- list(Strongly_Agree="1",
+                     Agree="2",
+                     Neutral="3",
+                     Disagree="4",
+                     Strongly_Disagree="5")
+  c2a3 <- ordered(c2a3, c("Strongly_Agree", "Agree", "Neutral", "Disagree","Strongly_Disagree"))
+  
+  new.d <- data.frame(new.d, c2a3)
+  new.d <- apply_labels(new.d, c2a3 = "Safe in Neighborhood: Childhood or young adult life")
+  
+  #print("Childhood or young adult life")
+  #summary(new.d$c2a3)
+  
+  c2a3_count<-count(new.d$c2a3)
+  colnames(c2a3_count)<- c("Answer", "Total")
+  kable(c2a3_count, format = "simple", align = 'l', caption = "3. Childhood or young adult life (up to age 30)")
+}
+```
+
+# C4
+C4. Thinking about your NEIGHBORS, as a whole, during the following 3 time periods:	
+a. How often do/did you see neighbors talking outside in the yard, on the street, at the corner park, etc.?	
+1=Often  
+2=Sometimes  
+3=Rarely/Never
+88=Don’t Know
+```{r C4: neighbors talking outside }
+print("Neighbors talking outside")
+if("c4a1" %in% varName.list) { 
+  c4a1 <- as.factor(d[,"c4a1"])  # * gets treated as NA by not including it in levels
+  levels(c4a1) <- list(Often="1",
+                     Sometimes="2",
+                     Rarely_Never="3",
+                     Do_Not_Know="88")
+  
+  new.d <- data.frame(new.d, c4a1)
+  new.d <- apply_labels(new.d, c4a1 = "Neighbors talking outside: Current")
+  
+  #print("Current")
+  #summary(new.d$c4a1)
+  c4a1_count<-count(new.d$c4a1)
+  colnames(c4a1_count)<- c("Answer", "Total")
+  kable(c4a1_count, format = "simple", align = 'l', caption = "1. Current (from prostate cancer diagnosis to present)")
+}
+
+if("c4a2" %in% varName.list) { 
+  c4a2 <- as.factor(d[,"c4a2"])  # * gets treated as NA by not including it in levels
+  levels(c4a2) <- list(Often="1",
+                     Sometimes="2",
+                     Rarely_Never="3",
+                     Do_Not_Know="88")
+  
+  new.d <- data.frame(new.d, c4a2)
+  new.d <- apply_labels(new.d, c4a2 = "Neighbors talking outside: Age 31 up to just before prostate cancer diagnosis")
+  
+  #print("Age 31 up to just before prostate cancer diagnosis")
+  #summary(new.d$c4a2)
+  c4a2_count<-count(new.d$c4a2)
+  colnames(c4a2_count)<- c("Answer", "Total")
+  kable(c4a2_count, format = "simple", align = 'l', caption = "2. Age 31 up to just before prostate cancer diagnosis")
+}
+
+if("c4a3" %in% varName.list) { 
+  c4a3 <- as.factor(d[,"c4a3"])  # * gets treated as NA by not including it in levels
+  levels(c4a3) <- list(Often="1",
+                     Sometimes="2",
+                     Rarely_Never="3",
+                     Do_Not_Know="88")
+  
+  new.d <- data.frame(new.d, c4a3)
+  new.d <- apply_labels(new.d, c4a3 = "Neighbors talking outside: Childhood or young adult life")
+  
+  #print("Childhood or young adult life")
+  #summary(new.d$c4a3)
+  c4a3_count<-count(new.d$c4a3)
+  colnames(c4a3_count)<- c("Answer", "Total")
+  kable(c4a3_count, format = "simple", align = 'l', caption = "3. Childhood or young adult life (up to age 30)")
+}
+
+```
+
+# D1
+D1. In the following questions, we are interested in your perceptions about the way other people have treated you because of your race/ethnicity or skin color.
+```{r Treatment becasue of race/ethnicity or skin color }
+if("d1aa" %in% varName.list) { 
+  d1aa <- ifelse(d[, "d1aa"]=="*", NA, ifelse(d[, "d1aa"]=="NA", NA, d[, "d1aa"]))
+  d1aa  <- as.factor(d1aa)
+  levels(d1aa) <- list(No="1",Yes="2")
+  
+  new.d <- data.frame(new.d, d1aa)
+  new.d <- apply_labels(new.d, d1aa = "Have you ever been unfairly fired from a job or been unfairly denied a promotion?")
+  
+  #print("Denied a promotion")
+  #summary(new.d$d1aa)
+  d1aa_count<-count(new.d$d1aa)
+  colnames(d1aa_count)<- c("Answer", "Total")
+  kable(d1aa_count, format = "simple", align = 'l', caption = "Aa. Been fired or denied a promotion?")
+}
+
+if("d1ab" %in% varName.list) { 
+  d1ab <- ifelse(d[, "d1ab"]=="*", NA, ifelse(d[, "d1ab"]=="NA", NA, d[, "d1ab"]))
+  d1ab  <- as.factor(d1ab)
+  levels(d1ab) <- list(Not_at_all="1",A_little="2", Somewhat="3",Extremely="4")
+  
+  new.d <- data.frame(new.d, d1ab)
+  new.d <- apply_labels(new.d, d1ab = "If yes, How stressful was this experience?")
+  
+  #print("Stress from denied a promotion")
+  #summary(new.d$d1ab)
+  d1ab_count<-count(new.d$d1ab)
+  colnames(d1ab_count)<- c("Answer", "Total")
+  kable(d1ab_count, format = "simple", align = 'l', caption = "Ab. If yes, How stressful was it?")
+}
+
+if("d1ba" %in% varName.list) { 
+  d1ba <- ifelse(d[, "d1ba"]=="*", NA, ifelse(d[, "d1ba"]=="NA", NA, d[, "d1ba"]))
+  d1ba  <- as.factor(d1ba)
+  levels(d1ba) <- list(No="1",Yes="2")
+  
+  new.d <- data.frame(new.d, d1ba)
+  new.d <- apply_labels(new.d, d1ba = "For unfair reasons, have you ever not been hired for a job?")
+  
+  #print("Not hired for a job")
+  #summary(new.d$d1ba)
+  d1ba_count<-count(new.d$d1ba)
+  colnames(d1ba_count)<- c("Answer", "Total")
+  kable(d1ba_count, format = "simple", align = 'l', caption = "Ba. Not been hired unfairly?")
+}
+
+if("d1bb" %in% varName.list) { 
+  d1bb <- ifelse(d[, "d1bb"]=="*", NA, ifelse(d[, "d1bb"]=="NA", NA, d[, "d1bb"]))
+  d1bb  <- as.factor(d1bb)
+  levels(d1bb) <- list(Not_at_all="1",A_little="2", Somewhat="3",Extremely="4")
+  
+  new.d <- data.frame(new.d, d1bb)
+  new.d <- apply_labels(new.d, d1ab = "If yes, How stressful was this experience?")
+  
+  #print("Stress from not hired for a job")
+  #summary(new.d$d1bb)
+  d1bb_count<-count(new.d$d1bb)
+  colnames(d1bb_count)<- c("Answer", "Total")
+  kable(d1bb_count, format = "simple", align = 'l', caption = "Bb. If yes, How stressful was it?")
+}
+
+if("d1ca" %in% varName.list) { 
+  d1ca <- ifelse(d[, "d1ca"]=="*", NA, ifelse(d[, "d1ca"]=="NA", NA, d[, "d1ca"]))
+  d1ca  <- as.factor(d1ca)
+  levels(d1ca) <- list(No="1",Yes="2")
+  
+  new.d <- data.frame(new.d, d1ca)
+  new.d <- apply_labels(new.d, d1ca = "Have you ever been unfairly stopped, searched, questioned, physically threatened or abused by the police?")
+  
+  #print("Unfair police")
+  #summary(new.d$d1ca)
+  d1ca_count<-count(new.d$d1ca)
+  colnames(d1ca_count)<- c("Answer", "Total")
+  kable(d1ca_count, format = "simple", align = 'l', caption = "Ca. Unfairly by the police?")
+}
+
+if("d1cb" %in% varName.list) { 
+  d1cb <- ifelse(d[, "d1cb"]=="*", NA, ifelse(d[, "d1cb"]=="NA", NA, d[, "d1cb"]))
+  d1cb  <- as.factor(d1cb)
+  levels(d1cb) <- list(Not_at_all="1",A_little="2", Somewhat="3",Extremely="4")
+  
+  new.d <- data.frame(new.d, d1cb)
+  new.d <- apply_labels(new.d, d1cb = "If yes, How stressful was this experience?")
+  
+  #print("Stress from unfair police")
+  #summary(new.d$d1cb)
+  d1cb_count<-count(new.d$d1cb)
+  colnames(d1cb_count)<- c("Answer", "Total")
+  kable(d1cb_count, format = "simple", align = 'l', caption = "Cb. If yes, How stressful was it?")
+}
+
+if("d1da" %in% varName.list) { 
+  d1da <- ifelse(d[, "d1da"]=="*", NA, ifelse(d[, "d1da"]=="NA", NA, d[, "d1da"]))
+  d1da  <- as.factor(d1da)
+  levels(d1da) <- list(No="1",Yes="2")
+  
+  new.d <- data.frame(new.d, d1da)
+  new.d <- apply_labels(new.d, d1da = "Have you ever been unfairly discouraged by a teacher or advisor from continuing your education?")
+  
+  #print("Unfair education")
+  #summary(new.d$d1da)
+  d1da_count<-count(new.d$d1da)
+  colnames(d1da_count)<- c("Answer", "Total")
+  kable(d1da_count, format = "simple", align = 'l', caption = "Da. Unfairly education?")
+}
+
+if("d1db" %in% varName.list) { 
+  d1db <- ifelse(d[, "d1db"]=="*", NA, ifelse(d[, "d1db"]=="NA", NA, d[, "d1db"]))
+  d1db  <- as.factor(d1db)
+  levels(d1db) <- list(Not_at_all="1",A_little="2", Somewhat="3",Extremely="4")
+  
+  new.d <- data.frame(new.d, d1db)
+  new.d <- apply_labels(new.d, d1db = "If yes, How stressful was this experience?")
+  
+  #print("Stress from unfair education")
+  #summary(new.d$d1db)
+  d1db_count<-count(new.d$d1db)
+  colnames(d1db_count)<- c("Answer", "Total")
+  kable(d1db_count, format = "simple", align = 'l', caption = "Db. If yes, How stressful was it?")
+}
+
+if("d1ea" %in% varName.list) { 
+  d1ea <- ifelse(d[, "d1ea"]=="*", NA, ifelse(d[, "d1ea"]=="NA", NA, d[, "d1ea"]))
+  d1ea  <- as.factor(d1ea)
+  levels(d1ea) <- list(No="1",Yes="2")
+  
+  new.d <- data.frame(new.d, d1ea)
+  new.d <- apply_labels(new.d, d1ea = "Have you ever been unfairly prevented from moving into a neighborhood because the landlord or a realtor refused to sell or rent you a house or apartment?")
+  
+  #print("Unfair neighborhood")
+  #summary(new.d$d1ea)
+  d1ea_count<-count(new.d$d1ea)
+  colnames(d1ea_count)<- c("Answer", "Total")
+  kable(d1ea_count, format = "simple", align = 'l', caption = "Ea. Unfairly neighborhood?")
+}
+
+if("d1eb" %in% varName.list) { 
+  d1eb <- ifelse(d[, "d1eb"]=="*", NA, ifelse(d[, "d1eb"]=="NA", NA, d[, "d1eb"]))
+  d1eb  <- as.factor(d1eb)
+  levels(d1eb) <- list(Not_at_all="1",A_little="2", Somewhat="3",Extremely="4")
+  
+  new.d <- data.frame(new.d, d1eb)
+  new.d <- apply_labels(new.d, d1eb = "If yes, How stressful was this experience?")
+  
+  #print("Stress from unfair neighborhood")
+  #summary(new.d$d1eb)
+  d1eb_count<-count(new.d$d1eb)
+  colnames(d1eb_count)<- c("Answer", "Total")
+  kable(d1eb_count, format = "simple", align = 'l', caption = "Eb. If yes, How stressful was it?")
+}
+
+if("d1fa" %in% varName.list) { 
+  d1fa <- ifelse(d[, "d1fa"]=="*", NA, ifelse(d[, "d1fa"]=="NA", NA, d[, "d1fa"]))
+  d1fa  <- as.factor(d1fa)
+  levels(d1fa) <- list(No="1",Yes="2")
+  
+  new.d <- data.frame(new.d, d1fa)
+  new.d <- apply_labels(new.d, d1fa = "Have you ever been unfairly denied a bank loan?")
+  
+  #print("Unfairly denied bank loan")
+  #summary(new.d$d1fa)
+  d1fa_count<-count(new.d$d1fa)
+  colnames(d1fa_count)<- c("Answer", "Total")
+  kable(d1fa_count, format = "simple", align = 'l', caption = "Fa. Unfairly denied a bank loan?")
+}
+
+if("d1fb" %in% varName.list) { 
+  d1fb <- ifelse(d[, "d1fb"]=="*", NA, ifelse(d[, "d1fb"]=="NA", NA, d[, "d1fb"]))
+  d1fb  <- as.factor(d1fb)
+  levels(d1fb) <- list(Not_at_all="1",A_little="2", Somewhat="3",Extremely="4")
+  
+  new.d <- data.frame(new.d, d1fb)
+  new.d <- apply_labels(new.d, d1fb = "If yes, How stressful was this experience?")
+  
+  #print("Stress from nfairly denied bank loan")
+  #summary(new.d$d1fb)
+  d1fb_count<-count(new.d$d1fb)
+  colnames(d1fb_count)<- c("Answer", "Total")
+  kable(d1fb_count, format = "simple", align = 'l', caption = "Fb. If yes, How stressful was it?")
+}
+
+if("d1ga" %in% varName.list) { 
+  d1ga <- ifelse(d[, "d1ga"]=="*", NA, ifelse(d[, "d1ga"]=="NA", NA, d[, "d1ga"]))
+  d1ga  <- as.factor(d1ga)
+  levels(d1ga) <- list(No="1",Yes="2")
+  
+  new.d <- data.frame(new.d, d1ga)
+  new.d <- apply_labels(new.d, d1ga = "Have you ever been unfairly treated when getting medical care?")
+  
+  #print("Unfair medical care")
+  #summary(new.d$d1ga)
+  d1ga_count<-count(new.d$d1ga)
+  colnames(d1ga_count)<- c("Answer", "Total")
+  kable(d1ga_count, format = "simple", align = 'l', caption = "Ga. Unfairly medical care?")
+}
+
+if("d1gb" %in% varName.list) { 
+  d1gb <- ifelse(d[, "d1gb"]=="*", NA, ifelse(d[, "d1gb"]=="NA", NA, d[, "d1gb"]))
+  d1gb  <- as.factor(d1gb)
+  levels(d1gb) <- list(Not_at_all="1",A_little="2", Somewhat="3",Extremely="4")
+  
+  new.d <- data.frame(new.d, d1gb)
+  new.d <- apply_labels(new.d, d1gb = "If yes, How stressful was this experience?")
+  
+  #print("Stress from unfair medical care")
+  #summary(new.d$d1gb)
+  d1gb_count<-count(new.d$d1gb)
+  colnames(d1gb_count)<- c("Answer", "Total")
+  kable(d1gb_count, format = "simple", align = 'l', caption = "Gb. If yes, How stressful was it?")
+}
+
+```
+
+# D3B
+b. You have received poorer service than other people at restaurants or stores
+```{r Received poorer service }
+if("d3b1" %in% varName.list) { 
+  d3b1 <- ifelse(d[, "d3b1"]=="*", NA, ifelse(d[, "d3b1"]=="NA", NA, d[, "d3b1"]))
+  d3b1  <- as.factor(d3b1)
+  levels(d3b1) <- list(Never="1",Rarely="2", Sometimes="3",Often="4")
+
+  new.d <- data.frame(new.d, d3b1)
+  new.d <- apply_labels(new.d, d3b1 = "Current (from prostate cancer diagnosis to the present)")
+  
+  #print("Current")
+  #summary(new.d$d3b1)\
+  d3b1_count<-count(new.d$d3b1)
+  colnames(d3b1_count)<- c("Answer", "Total")
+  kable(d3b1_count, format = "simple", align = 'l', caption = "1. Current (from prostate cancer diagnosis to the present)")
+}
+
+if("d3b2" %in% varName.list) { 
+  d3b2 <- ifelse(d[, "d3b2"]=="*", NA, ifelse(d[, "d3b2"]=="NA", NA, d[, "d3b2"]))
+  d3b2  <- as.factor(d3b2)
+  levels(d3b2) <- list(Never="1",Rarely="2", Sometimes="3",Often="4")
+
+  new.d <- data.frame(new.d, d3b2)
+  new.d <- apply_labels(new.d, d3b2 = " Age 31 up to just before prostate cancer diagnosis")
+  
+  #print("Before prostate cancer diagnosis")
+  #summary(new.d$d3b2)
+  d3b2_count<-count(new.d$d3b2)
+  colnames(d3b2_count)<- c("Answer", "Total")
+  kable(d3b2_count, format = "simple", align = 'l', caption = "2. Age 31 up to just before prostate cancer diagnosis")
+}
+
+if("d3b3" %in% varName.list) { 
+  d3b3 <- ifelse(d[, "d3b3"]=="*", NA, ifelse(d[, "d3b3"]=="NA", NA, d[, "d3b3"]))
+  d3b3  <- as.factor(d3b3)
+  levels(d3b3) <- list(Never="1",Rarely="2", Sometimes="3",Often="4")
+
+  new.d <- data.frame(new.d, d3b3)
+  new.d <- apply_labels(new.d, d3b3 = "Childhood or young adult life (up to age 30)")
+  
+  #print("Childhood and young adult")
+  #summary(new.d$d3b3)
+  d3b3_count<-count(new.d$d3b3)
+  colnames(d3b3_count)<- c("Answer", "Total")
+  kable(d3b3_count, format = "simple", align = 'l', caption = "3. Childhood or young adult life (up to age 30)")
+}
+
+```
+
+# D4
+D4. These statements are about how you currently see yourself. Indicate your level of agreement or disagreement with each statement.
+```{r Currently see yourself,results='asis'}
+for(i in letters[1:12]) {
+  q.term <- paste("d4", i, sep="")
+  q.v <- ifelse(d[, q.term]=="*", NA, ifelse(d[, q.term]=="NA", NA, d[, q.term]))
+  q.v  <- as.factor(q.v)
+  levels(q.v) <- list(Strongly_Agree="1",Somewhat_Agree="2", Somewhat_Disagree="3",Strongly_Disagree="4")
+  new.d <- data.frame(new.d, q.v)
+  label <- switch(i, "a" = "a. You’ve always felt that you could make of your life pretty much what you wanted to make of it.",
+                      "b" = "b. Once you make up your mind to do something, you stay with it until the job is completely done.",
+                      "c" = "c. You like doing things that other people thought could not be done.",
+                      "d" = "d. When things don’t go the way you want them to, that just makes you work even harder.",
+                      "e" = "e. Sometimes, you feel that if anything is going to be done right, you have to do it yourself.",
+                      "f" = "f. It’s not always easy, but you manage to find a way to do the things you really need to get done.",
+                      "g" = "g. Very seldom have you been disappointed by the results of your hard work.",
+                      "h" = "h. You feel you are the kind of individual who stands up for what he believes in, regardless of the consequences.",
+                      "i" = "i. In the past, even when things got really tough, you never lost sight of your goals.",
+                      "j" = "j. It’s important for you to be able to do things the way you want to do them rather than the way other people want you to do them.",
+                      "k" = "k. You don’t let your personal feelings get in the way of doing a job.",
+                      "l" = "l. Hard work has really helped you to get ahead in life.")
+  new.d <- apply_labels(new.d, q.v = label)
+  names(new.d)[names(new.d)=="q.v"] <- q.term
+  
+  #print(label)
+  #print(summary(new.d[,q.term]))
+  
+  d4_count<-count(new.d[,q.term])
+  colnames(d4_count)<- c("Answer", "Total")
+  print(kable(d4_count, format = "simple", align = 'l', caption = label),method = 'render')
+}
+
+```
+
+# D5
+D5. The next questions are about the time period of your childhood, before the age of 18. These are standard questions asked in many surveys of life history. This information will allow us to understand how problems that may occur early in life may affect health later in life. This is a sensitive topic and some people may feel uncomfortable with these questions. Please keep in mind that you can skip any question you do not want to answer. All information is kept confidential.
+When you were growing up, during the first 18 years of your life…
+```{r Childhood questions,results='asis' }
+for(i in letters[1:4]) {
+  q.term <- paste("d5", i, sep="")
+  q.v <- ifelse(d[, q.term]=="*", NA, ifelse(d[, q.term]=="NA", NA, d[, q.term]))
+  q.v  <- as.factor(q.v)
+  levels(q.v) <- list(No="1",Yes="2", Do_Not_Know="88",Prefer_Not_to_Answer="99")
+  new.d <- data.frame(new.d, q.v)
+  label <- switch(i, "a" = "a. Did you live with anyone who was depressed, mentally ill, or suicidal?",
+                      "b" = "b. Did you live with anyone who was a problem drinker or alcoholic?",
+                      "c" = "c. Did you live with anyone who used illegal street drugs or who abused prescription medications?",
+                      "d" = "d. Did you live with anyone who served time or was sentenced to serve time in a prison, jail, or other correctional facility?")
+  new.d <- apply_labels(new.d, q.v = label)
+  names(new.d)[names(new.d)=="q.v"] <- q.term
+  
+  #print(label)
+  #print(summary(new.d[,q.term]))
+  d51_count<-count(new.d[,q.term])
+  colnames(d51_count)<- c("Answer", "Total")
+  print(kable(d51_count, format = "simple", align = 'l', caption = label))
+}
+
+i <- "e"
+q.term <- paste("d5", i, sep="")
+q.v <- ifelse(d[, q.term]=="*", NA, ifelse(d[, q.term]=="NA", NA, d[, q.term]))
+q.v  <- as.factor(q.v)
+levels(q.v) <- list(No="1",Yes="2", Parents_not_married="3", Do_Not_Know="88",Prefer_Not_to_Answer="99")
+new.d <- data.frame(new.d, q.v)
+label <- switch(i, "e" = "e. Were your parents separated or divorced?")
+new.d <- apply_labels(new.d, q.v = label)
+names(new.d)[names(new.d)=="q.v"] <- q.term
+
+#print(label)
+#print(summary(new.d[,q.term]))
+d52_count<-count(new.d[,q.term])
+  colnames(d52_count)<- c("Answer", "Total")
+  print(kable(d52_count, format = "simple", align = 'l', caption = label))
+  
+for(i in letters[6:11]) {
+  q.term <- paste("d5", i, sep="")
+  q.v <- ifelse(d[, q.term]=="*", NA, ifelse(d[, q.term]=="NA", NA, d[, q.term]))
+  q.v  <- as.factor(q.v)
+  levels(q.v) <- list(Never="1",Once="2", More_than_once="3", Do_Not_Know="88",Prefer_Not_to_Answer="99")
+  
+  new.d <- data.frame(new.d, q.v)
+  label <- switch(i, "f" = "f. How often did your parents or adults in your home ever slap, hit, kick, punch or beat each other up?",
+                      "g" = "g. How often did a parent or adult in your home ever hit, beat, kick, or physically hurt you in any way? Do not include spanking.",
+                      "h" = "h. How often did a parent or adult in your home ever swear at you, insult you, or put you down?",
+                      "i" = "i. How often did anyone at least 5 years older than you or an adult, ever touch you sexually?",
+                      "j" = "j. How often did anyone at least 5 years older than you or an adult, try to make you touch them sexually?",
+                      "k" = "k. How often did anyone at least 5 years older than you or an adult, force you to have sex?")
+  new.d <- apply_labels(new.d, q.v = label)
+  names(new.d)[names(new.d)=="q.v"] <- q.term
+  
+  #print(label)
+  #print(summary(new.d[,q.term]))
+  d53_count<-count(new.d[,q.term])
+  colnames(d53_count)<- c("Answer", "Total")
+  print(kable(d53_count, format = "simple", align = 'l', caption = label))
+}
+
+```
+
+# E11
+E11. Your treatment decision: How true is each of the following statements for you?
+
+```{r treatment decision, results='asis'}
+for(i in letters[1:6]) {
+  q.term <- paste("e11", i, sep="")
+  q.v <- ifelse(d[, q.term]=="*", NA, ifelse(d[, q.term]=="NA", NA, d[, q.term]))
+  q.v  <- as.factor(q.v)
+  levels(q.v) <- list(Not_at_all="1",A_little_bit="2", Somewhat="3",Quite_a_bit="4", Very_much="5")
+  new.d <- data.frame(new.d, q.v)
+  label <- switch(i, "a" = "a. I had all the information I needed when a treatment was chosen for my prostate cancer?",
+                      "b" = "b. My doctors told me the whole story about the effects of treatment",
+                      "c" = "c. I knew the right questions to ask my doctor",
+                      "d" = "d. I had enough time to make a decision about my treatment",
+                      "e" = "e. I am satisfied with the choices I made in treating my prostate cancer",
+                      "f" = "f. I would recommend the treatment I had to a close relative or friend",
+                  )
+  new.d <- apply_labels(new.d, q.v = label)
+  names(new.d)[names(new.d)=="q.v"] <- q.term
+  
+  #print(label)
+  #print(summary(new.d[,q.term]))
+  e11_count<-count(new.d[,q.term])
+  colnames(e11_count)<- c("Answer", "Total")
+  print(kable(d51_count, format = "simple", align = 'l', caption = label))
+}
+```

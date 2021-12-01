@@ -1,0 +1,3955 @@
+---
+title: "EAC meeting - Survey data processing report - Merged"
+author: "Weijia Hu"
+date: "`r Sys.time()`"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    df_print: paged
+    code_folding: hide
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+require("RPostgreSQL") # for PostgreSQL
+library(zoo) # for date conversion
+library(expss) # for labels
+library(DBI) # for Database connectivity
+library(summarytools) # for summarizing variables
+library(tidyverse)
+library(plyr)
+library(knitr) # for creating tables
+library(questionr)
+
+# set working directory
+#setwd 
+("~/Google Drive File Stream/My Drive/Projects/RESPOND/CORE D/InitalDataCleaning")
+
+```
+
+```{r input survey data}
+load("vcomball20210601.Rda")
+d <- vcomball
+load("vsiteid20210601.Rda")
+
+```
+
+```{r first look - survey data - 108 vars, 29 questions}
+new.d <- data.frame(matrix(ncol=0, nrow=nrow(d)))
+new.d.1 <- data.frame(matrix(ncol=0, nrow=nrow(d)))
+```
+
+# SITE ID	
+- Codes
+   + 10 Greater CA
+   + 20 Georgia
+   + 25 North Carolina
+   + 30 Northern CA
+   + 40 Louisiana
+   + 50 New Jersey
+   + 60 Detroit
+   + 61 Michigan
+   + 70 Texas
+   + 80 Los Angeles County
+   + 81 USC-Other
+   + 82 USC-MEC
+   + 90 New York
+   + 94 Florida
+   + 95 WebRecruit-Limbo
+   + 99 WebRecruit
+   
+```{r siteid}
+
+  siteid <- as.factor(trimws(d[,"siteid"]))
+  #new.d.n <- data.frame(new.d.n, siteid) # keep NAACCR coding
+  
+  # NEED REGISTRY NAMES!!
+ 
+  
+  #replace number with names
+  
+  levels(siteid)[levels(siteid)=="80"] <- "Los Angeles County.80"
+  levels(siteid)[levels(siteid)=="30"] <- "Northern CA.30"
+  levels(siteid)[levels(siteid)=="10"] <- "Greater CA.10"
+  levels(siteid)[levels(siteid)=="60"] <- "Detroit.60"
+  levels(siteid)[levels(siteid)=="40"] <- "Louisiana.40"
+  levels(siteid)[levels(siteid)=="20"] <- "Georgia.20"
+  levels(siteid)[levels(siteid)=="61"] <- "Michigan.61"
+  
+  
+  new.d <- data.frame(new.d, siteid)
+  new.d <- apply_labels(new.d, siteid = "Site ID")
+  new.d.1 <- data.frame(new.d.1, siteid)
+  
+  #cro(new.d$siteid) # this is pretty but doesn't show NAs
+  #summary(new.d$siteid)
+  
+  #Using kable function to form a nice table
+  
+  siteid_count<-count(new.d$siteid)
+  colnames(siteid_count)<- c("Registry", "Total")
+  kable(siteid_count, format = "simple", align = 'l', caption = "Overview of all Registries")
+
+```
+
+# SURVEY ID
+- Scantron assigned SurveyID
+```{r survey ID }
+  surveyid <- as.factor(d[,"surveyid"])
+  isDup <- duplicated(surveyid)
+  numDups <- sum(isDup)
+  dups <- surveyid[isDup]
+  
+  new.d <- data.frame(new.d, surveyid)
+  new.d <- apply_labels(new.d, surveyid = "Survey ID")
+  
+  print(paste("Number of duplicates:", numDups))
+  print("The following are duplicated IDs:")
+  print(dups)
+  print("Number of NAs:")
+  print(sum(is.na(new.d$surveyid)))
+```
+
+# LOCATION NAME
+- Name of Registry delivery location
+```{r location name }
+  locationname <- as.factor(d[,"locationname"])
+  
+  new.d <- data.frame(new.d, locationname)
+  new.d <- apply_labels(new.d, locationname = "Recruitment Location")
+  
+  #To get the number of each registry
+  locationname_count<-count(new.d$locationname)
+  colnames(locationname_count)<- c("Location", "Total")
+  #To get freq of each registry
+  locationname_freq1<-table(new.d$locationname)
+  locationname_freq<-as.data.frame(round(prop.table(locationname_freq1),3))
+  colnames(locationname_freq)<- c("Location", "Freq")
+  #Merge them by "Location"
+  result<-merge(locationname_count,locationname_freq,by="Location", sort=F)
+  #Create a NICE table
+  kable(result, format = "simple", align = 'l', caption = "Overview of Registry delivery location")
+```
+
+# RESPOND ID
+- From Barcode label put on last page of survey by registries, identifies participant. ResponseID is assigned by the registries.
+```{r respond id }
+  respondid <- as.factor(d[,"respondid"])
+  #remove NAs in respondid in order to avoid showing NAs in duplicated values
+  respondid_rm<-respondid[!is.na(respondid)]
+  isDup <- duplicated(respondid_rm)
+  numDups <- sum(isDup)
+  dups <- respondid_rm[isDup]
+  
+  new.d <- data.frame(new.d, respondid)
+  new.d <- apply_labels(new.d, respondid = "RESPOND ID")
+  
+  print(paste("Number of duplicates:", numDups))
+  print("The following are duplicated IDs:")
+  print(dups)
+  print("Number of NAs:")
+  print(sum(is.na(new.d$respondid)))
+```
+
+# METHODOLOGY {.tabset}
+- How survey was completed  
+   + P=Paper
+   + O=Online complete
+
+## All data
+
+```{css, echo = FALSE}
+caption {
+      color: Black;
+      font-weight: bold;
+      font-size: 1.5em;
+      text-align: center
+    }
+```
+
+```{r methodology, message=FALSE, results='asis'}
+st_css()
+  methodology <- as.factor(d[,"methodology"])
+  levels(methodology) <- list(Paper="P",
+                              Online="O")
+  methodology <- ordered(methodology, c("Paper", "Online"))
+  new.d <- data.frame(new.d, methodology)
+  new.d <- apply_labels(new.d, methodology = "Methodology for Survey Completion")
+  temp.d <- data.frame (new.d, methodology)  
+  
+  result<-questionr::freq(temp.d$methodology, total = TRUE)
+  kable(result, format = "simple", align = 'l')
+```
+
+## LA County
+```{r methodology1, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Los Angeles County.80"), ]
+  result<-questionr::freq(temp.dd$methodology, total = TRUE)
+  kable(result, format = "simple", align = 'l')
+rm(temp.dd) 
+```
+
+## Northern CA
+```{r methodology2, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Northern CA.30"), ]
+  result<-questionr::freq(temp.dd$methodology, total = TRUE)
+  kable(result, format = "simple", align = 'l')
+rm(temp.dd) 
+```
+
+## Greater CA
+```{r methodology3, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Greater CA.10"), ]
+  result<-questionr::freq(temp.dd$methodology, total = TRUE)
+  kable(result, format = "simple", align = 'l')
+rm(temp.dd) 
+```
+
+## Detroit
+```{r methodology4, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Detroit.60"), ]
+  result<-questionr::freq(temp.dd$methodology, total = TRUE)
+  kable(result, format = "simple", align = 'l')
+rm(temp.dd) 
+```
+
+## Louisiana
+```{r methodology5, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Louisiana.40"), ]
+  result<-questionr::freq(temp.dd$methodology, total = TRUE)
+  kable(result, format = "simple", align = 'l')
+rm(temp.dd) 
+```
+
+## Georgia
+```{r methodology6, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Georgia.20"), ]
+  result<-questionr::freq(temp.dd$methodology, total = TRUE)
+  kable(result, format = "simple", align = 'l')
+rm(temp.dd) 
+```
+
+## Michigan
+```{r methodology7, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Michigan.61"), ]
+  result<-questionr::freq(temp.dd$methodology, total = TRUE)
+  kable(result, format = "simple", align = 'l')
+rm(temp.dd) 
+```
+
+# B1 {.tabset}
+
+- B1Aa: Father: Has this person had prostate cancer?
+- B1Ba: Any Brother: Has this person had prostate cancer?
+- B1Ca: Any Son: Has this person had prostate cancer?
+- B1Da: Maternal Grandfather (Mom’s side): Has this person had prostate cancer?
+- B1Ea: Paternal Grandfather (Dad’s side): Has this person had prostate cancer?
+
+## All data
+```{r B1}
+# B1Aa: Father: Has this person had prostate cancer?
+  b1aa <- as.factor(d[,"b1aa"])
+  levels(b1aa) <- list(No="1",
+                     Yes="2",
+                     Dont_know="88",
+                     Scantron_Error="*")
+  b1aa <- ordered(b1aa, c("No","Yes","Dont_know","Scantron_Error"))
+  
+  new.d <- data.frame(new.d, b1aa)
+  new.d <- apply_labels(new.d, b1aa = "Father")
+  temp.d <- data.frame (new.d, b1aa)  
+  
+  result<-questionr::freq(temp.d$b1aa,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "B1Aa: Father: Has this person had prostate cancer?")
+# B1Ba: Any Brother: Has this person had prostate cancer?
+  b1ba <- as.factor(d[,"b1ba"])
+  levels(b1ba) <- list(No="1",
+                     Yes="2",
+                     Dont_know="88",
+                     Scantron_Error="*")
+  b1ba <- ordered(b1ba, c("No","Yes","Dont_know","Scantron_Error"))
+  
+  new.d <- data.frame(new.d, b1ba)
+  new.d <- apply_labels(new.d, b1ba = "Any Brother")
+  temp.d <- data.frame (new.d, b1ba)  
+  
+  result<-questionr::freq(temp.d$b1ba,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "B1Ba: Any Brother: Has this person had prostate cancer?")
+# B1Ca: Any Son: Has this person had prostate cancer? 
+  b1ca <- as.factor(d[,"b1ca"])
+  levels(b1ca) <- list(No="1",
+                     Yes="2",
+                     Dont_know="88",
+                     Scantron_Error="*")
+  b1ca <- ordered(b1ca, c( "No","Yes","Dont_know","Scantron_Error"))
+  
+  new.d <- data.frame(new.d, b1ca)
+  new.d <- apply_labels(new.d, b1ca = "Any Son")
+  temp.d <- data.frame (new.d, b1ca)  
+  
+  result<-questionr::freq(temp.d$b1ca,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "B1Ca: Any Son: Has this person had prostate cancer?")
+# B1Da: Maternal Grandfather (Mom’s side): Has this person had prostate cancer?
+  b1da <- as.factor(d[,"b1da"])
+  levels(b1da) <- list(No="1",
+                     Yes="2",
+                     Dont_know="88",
+                     Scantron_Error="*")
+  b1da <- ordered(b1da, c( "No","Yes","Dont_know","Scantron_Error"))
+  
+  new.d <- data.frame(new.d, b1da)
+  new.d <- apply_labels(new.d, b1da = "Maternal Grandfather (Mom’s side)")
+  temp.d <- data.frame (new.d, b1da)  
+  
+  result<-questionr::freq(temp.d$b1da,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "B1Da: Maternal Grandfather (Mom’s side): Has this person had prostate cancer?")
+# B1Ea: Paternal Grandfather (Dad’s side): Has this person had prostate cancer?
+  b1ea <- as.factor(d[,"b1ea"])
+  levels(b1ea) <- list(No="1",
+                     Yes="2",
+                     Dont_know="88",
+                     Scantron_Error="*")
+  b1ea <- ordered(b1ea, c("No","Yes","Dont_know","Scantron_Error"))
+  
+  new.d <- data.frame(new.d, b1ea)
+  new.d <- apply_labels(new.d, b1ea = "Paternal Grandfather (Dad’s side)")
+  temp.d <- data.frame (new.d, b1ea)  
+  
+  result<-questionr::freq(temp.d$b1ea,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "B1Ea: Paternal Grandfather (Dad’s side): Has this person had prostate cancer?")
+```
+
+## LA County
+```{r B11, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Los Angeles County.80"), ]
+# B1Aa: Father: Has this person had prostate cancer?
+  result<-questionr::freq(temp.dd$b1aa,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "B1Aa: Father: Has this person had prostate cancer?")
+# B1Ba: Any Brother: Has this person had prostate cancer?
+  result<-questionr::freq(temp.dd$b1ba,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "B1Ba: Any Brother: Has this person had prostate cancer?")
+# B1Ca: Any Son: Has this person had prostate cancer? 
+  result<-questionr::freq(temp.dd$b1ca,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "B1Ca: Any Son: Has this person had prostate cancer? ")
+# B1Da: Maternal Grandfather (Mom’s side): Has this person had prostate cancer? 
+  result<-questionr::freq(temp.dd$b1da,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "B1Da: Maternal Grandfather (Mom’s side): Has this person had prostate cancer?")
+# B1Ea: Paternal Grandfather (Dad’s side): Has this person had prostate cancer?
+  result<-questionr::freq(temp.dd$b1ea,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "B1Ea: Paternal Grandfather (Dad’s side): Has this person had prostate cancer?")
+rm(temp.dd) 
+```
+
+## Northern CA
+```{r B12, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Northern CA.30"), ]
+# B1Aa: Father: Has this person had prostate cancer?
+  result<-questionr::freq(temp.dd$b1aa,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "B1Aa: Father: Has this person had prostate cancer?")
+# B1Ba: Any Brother: Has this person had prostate cancer?
+  result<-questionr::freq(temp.dd$b1ba,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "B1Ba: Any Brother: Has this person had prostate cancer?")
+# B1Ca: Any Son: Has this person had prostate cancer? 
+  result<-questionr::freq(temp.dd$b1ca,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "B1Ca: Any Son: Has this person had prostate cancer? ")
+# B1Da: Maternal Grandfather (Mom’s side): Has this person had prostate cancer? 
+  result<-questionr::freq(temp.dd$b1da,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "B1Da: Maternal Grandfather (Mom’s side): Has this person had prostate cancer?")
+# B1Ea: Paternal Grandfather (Dad’s side): Has this person had prostate cancer?
+  result<-questionr::freq(temp.dd$b1ea,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "B1Ea: Paternal Grandfather (Dad’s side): Has this person had prostate cancer?")
+rm(temp.dd) 
+```
+
+## Greater CA
+```{r B13, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Greater CA.10"), ]
+# B1Aa: Father: Has this person had prostate cancer?
+  result<-questionr::freq(temp.dd$b1aa,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "B1Aa: Father: Has this person had prostate cancer?")
+# B1Ba: Any Brother: Has this person had prostate cancer?
+  result<-questionr::freq(temp.dd$b1ba,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "B1Ba: Any Brother: Has this person had prostate cancer?")
+# B1Ca: Any Son: Has this person had prostate cancer? 
+  result<-questionr::freq(temp.dd$b1ca,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "B1Ca: Any Son: Has this person had prostate cancer? ")
+# B1Da: Maternal Grandfather (Mom’s side): Has this person had prostate cancer? 
+  result<-questionr::freq(temp.dd$b1da,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "B1Da: Maternal Grandfather (Mom’s side): Has this person had prostate cancer?")
+# B1Ea: Paternal Grandfather (Dad’s side): Has this person had prostate cancer?
+  result<-questionr::freq(temp.dd$b1ea,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "B1Ea: Paternal Grandfather (Dad’s side): Has this person had prostate cancer?")
+rm(temp.dd) 
+```
+
+## Detroit
+```{r B14, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Detroit.60"), ]
+# B1Aa: Father: Has this person had prostate cancer?
+  result<-questionr::freq(temp.dd$b1aa,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "B1Aa: Father: Has this person had prostate cancer?")
+# B1Ba: Any Brother: Has this person had prostate cancer?
+  result<-questionr::freq(temp.dd$b1ba,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "B1Ba: Any Brother: Has this person had prostate cancer?")
+# B1Ca: Any Son: Has this person had prostate cancer? 
+  result<-questionr::freq(temp.dd$b1ca,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "B1Ca: Any Son: Has this person had prostate cancer? ")
+# B1Da: Maternal Grandfather (Mom’s side): Has this person had prostate cancer? 
+  result<-questionr::freq(temp.dd$b1da,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "B1Da: Maternal Grandfather (Mom’s side): Has this person had prostate cancer?")
+# B1Ea: Paternal Grandfather (Dad’s side): Has this person had prostate cancer?
+  result<-questionr::freq(temp.dd$b1ea,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "B1Ea: Paternal Grandfather (Dad’s side): Has this person had prostate cancer?")
+rm(temp.dd) 
+```
+
+## Louisiana
+```{r B15, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Louisiana.40"), ]
+# B1Aa: Father: Has this person had prostate cancer?
+  result<-questionr::freq(temp.dd$b1aa,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "B1Aa: Father: Has this person had prostate cancer?")
+# B1Ba: Any Brother: Has this person had prostate cancer?
+  result<-questionr::freq(temp.dd$b1ba,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "B1Ba: Any Brother: Has this person had prostate cancer?")
+# B1Ca: Any Son: Has this person had prostate cancer? 
+  result<-questionr::freq(temp.dd$b1ca,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "B1Ca: Any Son: Has this person had prostate cancer? ")
+# B1Da: Maternal Grandfather (Mom’s side): Has this person had prostate cancer? 
+  result<-questionr::freq(temp.dd$b1da,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "B1Da: Maternal Grandfather (Mom’s side): Has this person had prostate cancer?")
+# B1Ea: Paternal Grandfather (Dad’s side): Has this person had prostate cancer?
+  result<-questionr::freq(temp.dd$b1ea,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "B1Ea: Paternal Grandfather (Dad’s side): Has this person had prostate cancer?")
+rm(temp.dd) 
+```
+
+## Georgia
+```{r B16, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Georgia.20"), ]
+# B1Aa: Father: Has this person had prostate cancer?
+  result<-questionr::freq(temp.dd$b1aa,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "B1Aa: Father: Has this person had prostate cancer?")
+# B1Ba: Any Brother: Has this person had prostate cancer?
+  result<-questionr::freq(temp.dd$b1ba,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "B1Ba: Any Brother: Has this person had prostate cancer?")
+# B1Ca: Any Son: Has this person had prostate cancer? 
+  result<-questionr::freq(temp.dd$b1ca,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "B1Ca: Any Son: Has this person had prostate cancer? ")
+# B1Da: Maternal Grandfather (Mom’s side): Has this person had prostate cancer? 
+  result<-questionr::freq(temp.dd$b1da,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "B1Da: Maternal Grandfather (Mom’s side): Has this person had prostate cancer?")
+# B1Ea: Paternal Grandfather (Dad’s side): Has this person had prostate cancer?
+  result<-questionr::freq(temp.dd$b1ea,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "B1Ea: Paternal Grandfather (Dad’s side): Has this person had prostate cancer?")
+rm(temp.dd) 
+```
+
+## Michigan
+```{r B17, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Michigan.61"), ]
+# B1Aa: Father: Has this person had prostate cancer?
+  result<-questionr::freq(temp.dd$b1aa,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "B1Aa: Father: Has this person had prostate cancer?")
+# B1Ba: Any Brother: Has this person had prostate cancer?
+  result<-questionr::freq(temp.dd$b1ba,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "B1Ba: Any Brother: Has this person had prostate cancer?")
+# B1Ca: Any Son: Has this person had prostate cancer? 
+  result<-questionr::freq(temp.dd$b1ca,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "B1Ca: Any Son: Has this person had prostate cancer? ")
+# B1Da: Maternal Grandfather (Mom’s side): Has this person had prostate cancer? 
+  result<-questionr::freq(temp.dd$b1da,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "B1Da: Maternal Grandfather (Mom’s side): Has this person had prostate cancer?")
+# B1Ea: Paternal Grandfather (Dad’s side): Has this person had prostate cancer?
+  result<-questionr::freq(temp.dd$b1ea,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "B1Ea: Paternal Grandfather (Dad’s side): Has this person had prostate cancer?")
+rm(temp.dd) 
+```
+
+# B3 {.tabset}
+- B3. In general, how would you rate your current health?  
+   + 1=Excellent  
+   + 2=Very Good  
+   + 3=Good  
+   + 4=Fair  
+   + 5=Poor
+   
+## All data
+```{r B3: current health }
+  b3 <- as.factor(d[,"b3"])
+  levels(b3) <- list(Excellent="1",
+                     Very_Good="2",
+                     Good="3",
+                     Fair="4",
+                     Poor="5",
+                     Scantron_Error="*")
+  b3 <- ordered(b3, c("Excellent","Very_Good","Good","Fair","Poor","Scantron_Error"))
+
+  new.d <- data.frame(new.d, b3)
+  new.d <- apply_labels(new.d, b3 = "Current Health")
+  temp.d <- data.frame (new.d, b3)  
+  
+  result<-questionr::freq(temp.d$b3, cum = TRUE, total = TRUE)
+  kable(result, format = "simple", align = 'l')
+```
+
+## LA County
+```{r b31, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Los Angeles County.80"), ]
+  result<-questionr::freq(temp.dd$b3, cum = TRUE, total = TRUE)
+  kable(result, format = "simple", align = 'l')
+rm(temp.dd) 
+```
+
+## Northern CA
+```{r b32, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Northern CA.30"), ]
+  result<-questionr::freq(temp.dd$b3, cum = TRUE, total = TRUE)
+  kable(result, format = "simple", align = 'l')
+rm(temp.dd) 
+```
+
+## Greater CA
+```{r b33, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Greater CA.10"), ]
+  result<-questionr::freq(temp.dd$b3, cum = TRUE, total = TRUE)
+  kable(result, format = "simple", align = 'l')
+rm(temp.dd) 
+```
+
+## Detroit
+```{r b34, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Detroit.60"), ]
+  result<-questionr::freq(temp.dd$b3, cum = TRUE, total = TRUE)
+  kable(result, format = "simple", align = 'l')
+rm(temp.dd) 
+```
+
+## Louisiana
+```{r b35, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Louisiana.40"), ]
+  result<-questionr::freq(temp.dd$b3, cum = TRUE, total = TRUE)
+  kable(result, format = "simple", align = 'l')
+rm(temp.dd) 
+```
+
+## Georgia
+```{r b36, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Georgia.20"), ]
+  result<-questionr::freq(temp.dd$b3, cum = TRUE, total = TRUE)
+  kable(result, format = "simple", align = 'l')
+rm(temp.dd) 
+```
+
+## Michigan
+```{r b37, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Michigan.61"), ]
+  result<-questionr::freq(temp.dd$b3, cum = TRUE, total = TRUE)
+  kable(result, format = "simple", align = 'l')
+rm(temp.dd) 
+```
+
+# B4 {.tabset}
+- B4. Has the doctor ever told you that you have/had…
+   + Heart Attack
+   + Heart Failure or CHF
+   + Stroke
+   + Hypertension
+   + Peripheral arterial disease
+   + High Cholesterol
+   + Asthma, COPD
+   + Stomach ulcers
+   + Crohn's Disease
+   + Diabetes
+   + Kidney Problems
+   + Cirrhosis, liver damage
+   + Arthritis
+   + Dementia
+   + Depression
+   + AIDS
+   + Other Cancer
+   
+## All data
+```{r B4: Comorbidities}
+# Heart Attack
+  b4aa <- as.factor(d[,"b4aa"])
+  levels(b4aa) <- list(No="1",
+                     Yes="2",
+                     Scantron_Error="*")
+  b4aa <- ordered(b4aa, c("No", "Yes", "Scantron_Error"))
+  
+  new.d <- data.frame(new.d, b4aa)
+  new.d <- apply_labels(new.d, b4aa = "Heart Attack")
+  temp.d <- data.frame (new.d, b4aa)  
+  
+  result<-questionr::freq(temp.d$b4aa, total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "Heart Attack")
+# Heart Failure or CHF
+  b4ba <- as.factor(d[,"b4ba"])
+  levels(b4ba) <- list(No="1",
+                     Yes="2",
+                     Scantron_Error="*")
+  b4ba <- ordered(b4ba, c("No", "Yes", "Scantron_Error"))
+  
+  new.d <- data.frame(new.d, b4ba)
+  new.d <- apply_labels(new.d, b4ba = "Heart Failure or CHF")
+  temp.d <- data.frame (new.d, b4ba)  
+  
+  result<-questionr::freq(temp.d$b4ba, total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "Heart Failure or CHF")
+# Stroke  
+  b4ca <- as.factor(d[,"b4ca"])
+  levels(b4ca) <- list(No="1",
+                     Yes="2",
+                     Scantron_Error="*")
+  b4ca <- ordered(b4ca, c("No", "Yes", "Scantron_Error"))
+  
+  new.d <- data.frame(new.d, b4ca)
+  new.d <- apply_labels(new.d, b4ca = "Stroke")
+  temp.d <- data.frame (new.d, b4ca)  
+  
+  result<-questionr::freq(temp.d$b4ca,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "Stroke")
+# Hypertension 
+  b4da <- as.factor(d[,"b4da"])
+  levels(b4da) <- list(No="1",
+                     Yes="2",
+                     Scantron_Error="*")
+  b4da <- ordered(b4da, c("No", "Yes", "Scantron_Error"))
+  
+  new.d <- data.frame(new.d, b4da)
+  new.d <- apply_labels(new.d, b4da = "Hypertension")
+  temp.d <- data.frame (new.d, b4da)  
+  
+  result<-questionr::freq(temp.d$b4da, total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "Hypertension")
+# Peripheral arterial disease 
+  b4ea <- as.factor(d[,"b4ea"])
+  levels(b4ea) <- list(No="1",
+                     Yes="2",
+                     Scantron_Error="*")
+  b4ea <- ordered(b4ea, c("No", "Yes", "Scantron_Error"))
+  
+  new.d <- data.frame(new.d, b4ea)
+  new.d <- apply_labels(new.d, b4ea = "Peripheral arterial disease")
+  temp.d <- data.frame (new.d, b4ea)  
+  
+  result<-questionr::freq(temp.d$b4ea,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "Peripheral arterial disease")
+# High Cholesterol 
+  b4fa <- as.factor(d[,"b4fa"])
+  levels(b4fa) <- list(No="1",
+                     Yes="2",
+                     Scantron_Error="*")
+  b4fa <- ordered(b4fa, c("No", "Yes", "Scantron_Error"))
+  
+  new.d <- data.frame(new.d, b4fa)
+  new.d <- apply_labels(new.d, b4fa = "High Cholesterol")
+  temp.d <- data.frame (new.d, b4fa)  
+  
+  result<-questionr::freq(temp.d$b4fa, total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "High Cholesterol")  
+#  Asthma, COPD
+  b4ga <- as.factor(d[,"b4ga"])
+  levels(b4ga) <- list(No="1",
+                     Yes="2",
+                     Scantron_Error="*")
+  b4ga <- ordered(b4ga, c("No", "Yes", "Scantron_Error"))
+  
+  new.d <- data.frame(new.d, b4ga)
+  new.d <- apply_labels(new.d, b4ga = "Asthma, COPD")
+  temp.d <- data.frame (new.d, b4ga)  
+  
+  result<-questionr::freq(temp.d$b4ga, total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "Asthma, COPD") 
+# Stomach ulcers
+  b4ha <- as.factor(d[,"b4ha"])
+  levels(b4ha) <- list(No="1",
+                     Yes="2",
+                     Scantron_Error="*")
+  b4ha <- ordered(b4ha, c("No", "Yes", "Scantron_Error"))
+  
+  new.d <- data.frame(new.d, b4ha)
+  new.d <- apply_labels(new.d, b4ha = "Stomach ulcers")
+  temp.d <- data.frame (new.d, b4ha)  
+  
+  result<-questionr::freq(temp.d$b4ha, total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "Stomach ulcers")
+# Crohn's Disease
+  b4ia <- as.factor(d[,"b4ia"])
+  levels(b4ia) <- list(No="1",
+                     Yes="2",
+                     Scantron_Error="*")
+  b4ia <- ordered(b4ia, c("No", "Yes","Scantron_Error"))
+  
+  new.d <- data.frame(new.d, b4ia)
+  new.d <- apply_labels(new.d, b4ia = "Crohn's Disease")
+  temp.d <- data.frame (new.d, b4ia)  
+  
+  result<-questionr::freq(temp.d$b4ia, total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "Crohn's Disease")
+# Diabetes
+  b4ja <- as.factor(d[,"b4ja"])
+  levels(b4ja) <- list(No="1",
+                     Yes="2",
+                     Scantron_Error="*")
+  b4ja <- ordered(b4ja, c("No", "Yes","Scantron_Error"))
+  
+  new.d <- data.frame(new.d, b4ja)
+  new.d <- apply_labels(new.d, b4ja = "Diabetes")
+  temp.d <- data.frame (new.d, b4ja)  
+  
+  result<-questionr::freq(temp.d$b4ja, total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "Diabetes")
+# Kidney Problems
+  b4ka <- as.factor(d[,"b4ka"])
+  levels(b4ka) <- list(No="1",
+                     Yes="2",
+                     Scantron_Error="*")
+  b4ka <- ordered(b4ka, c("No", "Yes", "Scantron_Error"))
+  
+  new.d <- data.frame(new.d, b4ka)
+  new.d <- apply_labels(new.d, b4ka = "Kidney Problems")
+  temp.d <- data.frame (new.d, b4ka)  
+  
+  result<-questionr::freq(temp.d$b4ka, total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "Kidney Problems")
+# Cirrhosis, liver damage
+  b4la <- as.factor(d[,"b4la"])
+  levels(b4la) <- list(No="1",
+                     Yes="2",
+                     Scantron_Error="*")
+  b4la <- ordered(b4la, c("No", "Yes","Scantron_Error"))
+  
+  new.d <- data.frame(new.d, b4la)
+  new.d <- apply_labels(new.d, b4la = "Cirrhosis, liver damage")
+  temp.d <- data.frame (new.d, b4la)  
+  
+  result<-questionr::freq(temp.d$b4la, total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "Cirrhosis, liver damage")
+# Arthritis
+  b4ma <- as.factor(d[,"b4ma"])
+  levels(b4ma) <- list(No="1",
+                     Yes="2",
+                     Scantron_Error="*")
+  b4ma <- ordered(b4ma, c("No", "Yes","Scantron_Error"))
+  
+  new.d <- data.frame(new.d, b4ma)
+  new.d <- apply_labels(new.d, b4ma = "Arthritis")
+  temp.d <- data.frame (new.d, b4ma)  
+  
+  result<-questionr::freq(temp.d$b4ma, total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "Arthritis")
+# Dementia
+  b4na <- as.factor(d[,"b4na"])
+  levels(b4na) <- list(No="1",
+                     Yes="2",
+                     Scantron_Error="*")
+  b4na <- ordered(b4na, c("No", "Yes","Scantron_Error"))
+  
+  new.d <- data.frame(new.d, b4na)
+  new.d <- apply_labels(new.d, b4na = "Dementia")
+  temp.d <- data.frame (new.d, b4na)  
+  
+  result<-questionr::freq(temp.d$b4na, total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "Dementia")
+# Depression 
+  b4oa <- as.factor(d[,"b4oa"])
+  levels(b4oa) <- list(No="1",
+                     Yes="2",
+                     Scantron_Error="*")
+  b4oa <- ordered(b4oa, c("No", "Yes","Scantron_Error"))
+  
+  new.d <- data.frame(new.d, b4oa)
+  new.d <- apply_labels(new.d, b4oa = "Depression")
+  temp.d <- data.frame (new.d, b4oa)  
+  
+  result<-questionr::freq(temp.d$b4oa, total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "Depression")
+# AIDS
+  b4pa <- as.factor(d[,"b4pa"])
+  levels(b4pa) <- list(No="1",
+                     Yes="2",
+                     Scantron_Error="*")
+  b4pa <- ordered(b4pa, c("No", "Yes","Scantron_Error"))
+  
+  new.d <- data.frame(new.d, b4pa)
+  new.d <- apply_labels(new.d, b4pa = "AIDS")
+  temp.d <- data.frame (new.d, b4pa)  
+  
+  result<-questionr::freq(temp.d$b4pa, total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "AIDS")
+# Other Cancer
+  b4qa <- as.factor(d[,"b4qa"])
+  levels(b4qa) <- list(No="1",
+                     Yes="2",
+                     Scantron_Error="*")
+  b4qa <- ordered(b4qa, c("No", "Yes","Scantron_Error"))
+  
+  new.d <- data.frame(new.d, b4qa)
+  new.d <- apply_labels(new.d, b4qa = "Other Cancer")
+  temp.d <- data.frame (new.d, b4qa)  
+  
+  result<-questionr::freq(temp.d$b4qa, total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "Other Cancer")
+```
+
+## LA County
+```{r b41, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Los Angeles County.80"), ]
+  # Heart Attack
+  result<-questionr::freq(temp.dd$b4aa, total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "Heart Attack")
+# Heart Failure or CHF
+  result<-questionr::freq(temp.dd$b4ba,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "Heart Failure or CHF")
+# Stroke  
+  result<-questionr::freq(temp.dd$b4ca ,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "Stroke")
+# Hypertension 
+  result<-questionr::freq(temp.dd$b4da ,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "Hypertension")
+# Peripheral arterial disease 
+  result<-questionr::freq(temp.dd$b4ea ,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "Peripheral arterial disease")
+# High Cholesterol 
+  result<-questionr::freq(temp.dd$b4fa ,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "High Cholesterol")  
+#  Asthma, COPD
+  result<-questionr::freq(temp.dd$b4ga ,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "Asthma, COPD") 
+# Stomach ulcers
+  result<-questionr::freq(temp.dd$b4ha ,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "Stomach ulcers")
+# Crohn's Disease
+  result<-questionr::freq(temp.dd$b4ia ,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "Crohn's Disease")
+# Diabetes
+  result<-questionr::freq(temp.dd$b4ja ,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "Diabetes")
+# Kidney Problems
+  result<-questionr::freq(temp.dd$b4ka ,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "Kidney Problems")
+# Cirrhosis, liver damage
+  result<-questionr::freq(temp.dd$b4la ,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "Cirrhosis, liver damage")
+# Arthritis
+  result<-questionr::freq(temp.dd$b4ma ,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "Arthritis")
+# Dementia
+ result<-questionr::freq(temp.dd$b4na ,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "Dementia")
+# Depression 
+  result<-questionr::freq(temp.dd$b4oa ,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "Depression")
+# AIDS
+  result<-questionr::freq(temp.dd$b4pa ,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "AIDS")
+# Other Cancer
+  result<-questionr::freq(temp.dd$b4qa ,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "Other Cancer")
+  
+rm(temp.dd) 
+```
+
+## Northern CA
+```{r b42, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Northern CA.30"), ]
+  # Heart Attack
+  result<-questionr::freq(temp.dd$b4aa ,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "Heart Attack")
+# Heart Failure or CHF
+  result<-questionr::freq(temp.dd$b4ba ,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "Heart Failure or CHF")
+# Stroke  
+  result<-questionr::freq(temp.dd$b4ca ,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "Stroke")
+# Hypertension 
+  result<-questionr::freq(temp.dd$b4da ,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "Hypertension")
+# Peripheral arterial disease 
+  result<-questionr::freq(temp.dd$b4ea ,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "Peripheral arterial disease")
+# High Cholesterol 
+  result<-questionr::freq(temp.dd$b4fa ,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "High Cholesterol")  
+#  Asthma, COPD
+  result<-questionr::freq(temp.dd$b4ga ,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "Asthma, COPD") 
+# Stomach ulcers
+  result<-questionr::freq(temp.dd$b4ha ,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "Stomach ulcers")
+# Crohn's Disease
+  result<-questionr::freq(temp.dd$b4ia ,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "Crohn's Disease")
+# Diabetes
+  result<-questionr::freq(temp.dd$b4ja ,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "Diabetes")
+# Kidney Problems
+  result<-questionr::freq(temp.dd$b4ka ,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "Kidney Problems")
+# Cirrhosis, liver damage
+  result<-questionr::freq(temp.dd$b4la ,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "Cirrhosis, liver damage")
+# Arthritis
+  result<-questionr::freq(temp.dd$b4ma ,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "Arthritis")
+# Dementia
+ result<-questionr::freq(temp.dd$b4na ,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "Dementia")
+# Depression 
+  result<-questionr::freq(temp.dd$b4oa ,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "Depression")
+# AIDS
+  result<-questionr::freq(temp.dd$b4pa ,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "AIDS")
+# Other Cancer
+  result<-questionr::freq(temp.dd$b4qa ,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "Other Cancer")
+rm(temp.dd) 
+```
+
+## Greater CA
+```{r b43, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Greater CA.10"), ]
+  # Heart Attack
+  result<-questionr::freq(temp.dd$b4aa ,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "Heart Attack")
+# Heart Failure or CHF
+  result<-questionr::freq(temp.dd$b4ba ,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "Heart Failure or CHF")
+# Stroke  
+  result<-questionr::freq(temp.dd$b4ca ,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "Stroke")
+# Hypertension 
+  result<-questionr::freq(temp.dd$b4da ,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "Hypertension")
+# Peripheral arterial disease 
+  result<-questionr::freq(temp.dd$b4ea ,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "Peripheral arterial disease")
+# High Cholesterol 
+  result<-questionr::freq(temp.dd$b4fa ,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "High Cholesterol")  
+#  Asthma, COPD
+  result<-questionr::freq(temp.dd$b4ga ,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "Asthma, COPD") 
+# Stomach ulcers
+  result<-questionr::freq(temp.dd$b4ha ,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "Stomach ulcers")
+# Crohn's Disease
+  result<-questionr::freq(temp.dd$b4ia ,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "Crohn's Disease")
+# Diabetes
+  result<-questionr::freq(temp.dd$b4ja ,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "Diabetes")
+# Kidney Problems
+  result<-questionr::freq(temp.dd$b4ka ,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "Kidney Problems")
+# Cirrhosis, liver damage
+  result<-questionr::freq(temp.dd$b4la ,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "Cirrhosis, liver damage")
+# Arthritis
+  result<-questionr::freq(temp.dd$b4ma ,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "Arthritis")
+# Dementia
+ result<-questionr::freq(temp.dd$b4na ,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "Dementia")
+# Depression 
+  result<-questionr::freq(temp.dd$b4oa ,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "Depression")
+# AIDS
+  result<-questionr::freq(temp.dd$b4pa ,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "AIDS")
+# Other Cancer
+  result<-questionr::freq(temp.dd$b4qa ,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "Other Cancer")
+rm(temp.dd) 
+```
+
+## Detroit
+```{r b44, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Detroit.60"), ]
+  # Heart Attack
+  result<-questionr::freq(temp.dd$b4aa ,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "Heart Attack")
+# Heart Failure or CHF
+  result<-questionr::freq(temp.dd$b4ba ,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "Heart Failure or CHF")
+# Stroke  
+  result<-questionr::freq(temp.dd$b4ca ,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "Stroke")
+# Hypertension 
+  result<-questionr::freq(temp.dd$b4da ,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "Hypertension")
+# Peripheral arterial disease 
+  result<-questionr::freq(temp.dd$b4ea ,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "Peripheral arterial disease")
+# High Cholesterol 
+  result<-questionr::freq(temp.dd$b4fa ,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "High Cholesterol")  
+#  Asthma, COPD
+  result<-questionr::freq(temp.dd$b4ga ,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "Asthma, COPD") 
+# Stomach ulcers
+  result<-questionr::freq(temp.dd$b4ha ,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "Stomach ulcers")
+# Crohn's Disease
+  result<-questionr::freq(temp.dd$b4ia ,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "Crohn's Disease")
+# Diabetes
+  result<-questionr::freq(temp.dd$b4ja ,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "Diabetes")
+# Kidney Problems
+  result<-questionr::freq(temp.dd$b4ka ,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "Kidney Problems")
+# Cirrhosis, liver damage
+  result<-questionr::freq(temp.dd$b4la ,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "Cirrhosis, liver damage")
+# Arthritis
+  result<-questionr::freq(temp.dd$b4ma ,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "Arthritis")
+# Dementia
+ result<-questionr::freq(temp.dd$b4na ,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "Dementia")
+# Depression 
+  result<-questionr::freq(temp.dd$b4oa ,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "Depression")
+# AIDS
+  result<-questionr::freq(temp.dd$b4pa ,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "AIDS")
+# Other Cancer
+  result<-questionr::freq(temp.dd$b4qa ,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "Other Cancer")
+rm(temp.dd) 
+```
+
+## Louisiana
+```{r b45, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Louisiana.40"), ]
+  # Heart Attack
+  result<-questionr::freq(temp.dd$b4aa ,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "Heart Attack")
+# Heart Failure or CHF
+  result<-questionr::freq(temp.dd$b4ba ,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "Heart Failure or CHF")
+# Stroke  
+  result<-questionr::freq(temp.dd$b4ca ,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "Stroke")
+# Hypertension 
+  result<-questionr::freq(temp.dd$b4da ,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "Hypertension")
+# Peripheral arterial disease 
+  result<-questionr::freq(temp.dd$b4ea ,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "Peripheral arterial disease")
+# High Cholesterol 
+  result<-questionr::freq(temp.dd$b4fa ,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "High Cholesterol")  
+#  Asthma, COPD
+  result<-questionr::freq(temp.dd$b4ga ,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "Asthma, COPD") 
+# Stomach ulcers
+  result<-questionr::freq(temp.dd$b4ha ,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "Stomach ulcers")
+# Crohn's Disease
+  result<-questionr::freq(temp.dd$b4ia ,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "Crohn's Disease")
+# Diabetes
+  result<-questionr::freq(temp.dd$b4ja ,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "Diabetes")
+# Kidney Problems
+  result<-questionr::freq(temp.dd$b4ka ,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "Kidney Problems")
+# Cirrhosis, liver damage
+  result<-questionr::freq(temp.dd$b4la ,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "Cirrhosis, liver damage")
+# Arthritis
+  result<-questionr::freq(temp.dd$b4ma ,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "Arthritis")
+# Dementia
+ result<-questionr::freq(temp.dd$b4na ,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "Dementia")
+# Depression 
+  result<-questionr::freq(temp.dd$b4oa ,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "Depression")
+# AIDS
+  result<-questionr::freq(temp.dd$b4pa ,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "AIDS")
+# Other Cancer
+  result<-questionr::freq(temp.dd$b4qa ,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "Other Cancer")
+rm(temp.dd) 
+```
+
+## Georgia
+```{r b46, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Georgia.20"), ]
+  # Heart Attack
+  result<-questionr::freq(temp.dd$b4aa ,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "Heart Attack")
+# Heart Failure or CHF
+  result<-questionr::freq(temp.dd$b4ba ,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "Heart Failure or CHF")
+# Stroke  
+  result<-questionr::freq(temp.dd$b4ca ,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "Stroke")
+# Hypertension 
+  result<-questionr::freq(temp.dd$b4da ,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "Hypertension")
+# Peripheral arterial disease 
+  result<-questionr::freq(temp.dd$b4ea ,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "Peripheral arterial disease")
+# High Cholesterol 
+  result<-questionr::freq(temp.dd$b4fa ,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "High Cholesterol")  
+#  Asthma, COPD
+  result<-questionr::freq(temp.dd$b4ga ,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "Asthma, COPD") 
+# Stomach ulcers
+  result<-questionr::freq(temp.dd$b4ha ,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "Stomach ulcers")
+# Crohn's Disease
+  result<-questionr::freq(temp.dd$b4ia ,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "Crohn's Disease")
+# Diabetes
+  result<-questionr::freq(temp.dd$b4ja ,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "Diabetes")
+# Kidney Problems
+  result<-questionr::freq(temp.dd$b4ka ,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "Kidney Problems")
+# Cirrhosis, liver damage
+  result<-questionr::freq(temp.dd$b4la ,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "Cirrhosis, liver damage")
+# Arthritis
+  result<-questionr::freq(temp.dd$b4ma ,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "Arthritis")
+# Dementia
+ result<-questionr::freq(temp.dd$b4na ,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "Dementia")
+# Depression 
+  result<-questionr::freq(temp.dd$b4oa ,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "Depression")
+# AIDS
+  result<-questionr::freq(temp.dd$b4pa ,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "AIDS")
+# Other Cancer
+  result<-questionr::freq(temp.dd$b4qa ,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "Other Cancer")
+rm(temp.dd) 
+```
+
+## Michigan
+```{r b47, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Michigan.61"), ]
+  # Heart Attack
+  result<-questionr::freq(temp.dd$b4aa ,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "Heart Attack")
+# Heart Failure or CHF
+  result<-questionr::freq(temp.dd$b4ba ,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "Heart Failure or CHF")
+# Stroke  
+  result<-questionr::freq(temp.dd$b4ca ,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "Stroke")
+# Hypertension 
+  result<-questionr::freq(temp.dd$b4da ,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "Hypertension")
+# Peripheral arterial disease 
+  result<-questionr::freq(temp.dd$b4ea ,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "Peripheral arterial disease")
+# High Cholesterol 
+  result<-questionr::freq(temp.dd$b4fa ,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "High Cholesterol")  
+#  Asthma, COPD
+  result<-questionr::freq(temp.dd$b4ga ,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "Asthma, COPD") 
+# Stomach ulcers
+  result<-questionr::freq(temp.dd$b4ha ,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "Stomach ulcers")
+# Crohn's Disease
+  result<-questionr::freq(temp.dd$b4ia ,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "Crohn's Disease")
+# Diabetes
+  result<-questionr::freq(temp.dd$b4ja ,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "Diabetes")
+# Kidney Problems
+  result<-questionr::freq(temp.dd$b4ka ,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "Kidney Problems")
+# Cirrhosis, liver damage
+  result<-questionr::freq(temp.dd$b4la ,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "Cirrhosis, liver damage")
+# Arthritis
+  result<-questionr::freq(temp.dd$b4ma ,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "Arthritis")
+# Dementia
+ result<-questionr::freq(temp.dd$b4na ,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "Dementia")
+# Depression 
+  result<-questionr::freq(temp.dd$b4oa ,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "Depression")
+# AIDS
+  result<-questionr::freq(temp.dd$b4pa ,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "AIDS")
+# Other Cancer
+  result<-questionr::freq(temp.dd$b4qa ,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "Other Cancer")
+rm(temp.dd) 
+```
+
+# B5 {.tabset}
+- B5. Where do you usually go for routine medical care (seeing a doctor for any reason, not just for cancer care)?
+  + 1=Community health center or free clinic
+  + 2=Hospital (not emergency)/ urgent care clinic
+  + 3=Private doctor's office 
+  + 4=Emergency room 
+  + 5=Veteran's Affairs/VA
+  + 6=Other type of location
+  
+## All data
+```{r B5}
+  b5 <- as.factor(d[,"b5"])
+  levels(b5) <- list(Community_center_free_clinic="1",
+                     Hospital_urgent_care_clinic="2",
+                     Private_Dr_office="3",
+                     ER="4",
+                     VA="5",
+                     Other="6",
+                     Scantron_Error="*")
+  b5 <- ordered(b5, c("Community_center_free_clinic", "Hospital_urgent_care_clinic", "Private_Dr_office", "ER","VA","Other","Scantron_Error"))
+  
+  new.d <- data.frame(new.d, b5)
+  new.d <- apply_labels(new.d, b5 = "routine medical care")
+  temp.d <- data.frame (new.d, b5)  
+  
+  result<-questionr::freq(temp.d$b5 ,total = TRUE)
+  kable(result, format = "simple", align = 'l')
+```
+
+## LA County
+```{r b51, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Los Angeles County.80"), ]
+  result<-questionr::freq(temp.dd$b5 ,total = TRUE)
+  kable(result, format = "simple", align = 'l')
+rm(temp.dd) 
+```
+
+## Northern CA
+```{r b52, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Northern CA.30"), ]
+  result<-questionr::freq(temp.dd$b5 ,total = TRUE)
+  kable(result, format = "simple", align = 'l')
+rm(temp.dd) 
+```
+
+## Greater CA
+```{r b53, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Greater CA.10"), ]
+  result<-questionr::freq(temp.dd$b5 ,total = TRUE)
+  kable(result, format = "simple", align = 'l')
+rm(temp.dd) 
+```
+
+## Detroit
+```{r b54, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Detroit.60"), ]
+  result<-questionr::freq(temp.dd$b5 ,total = TRUE)
+  kable(result, format = "simple", align = 'l')
+rm(temp.dd) 
+```
+
+## Louisiana
+```{r b55, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Louisiana.40"), ]
+  result<-questionr::freq(temp.dd$b5 ,total = TRUE)
+  kable(result, format = "simple", align = 'l')
+rm(temp.dd) 
+```
+
+## Georgia
+```{r b56, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Georgia.20"), ]
+  result<-questionr::freq(temp.dd$b5 ,total = TRUE)
+  kable(result, format = "simple", align = 'l')
+rm(temp.dd) 
+```
+
+## Michigan
+```{r b57, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Michigan.61"), ]
+  result<-questionr::freq(temp.dd$b5 ,total = TRUE)
+  kable(result, format = "simple", align = 'l')
+rm(temp.dd) 
+```
+
+# C1 {.tabset}
+- C1. How many years have you lived in your current address?
+  + 1=Less than 1 year 
+  + 2=1-5 years
+  + 3=6-10 years
+  + 4=11-15 years
+  + 5=16-20 years
+  + 6=21+ years
+
+## All data
+```{r C1}
+  c1 <- as.factor(d[,"c1"])
+  levels(c1) <- list(Less_than_1_year="1",
+                     years_1_5="2",
+                     years_6_10="3",
+                     years_11_15="4",
+                     years_16_20="5",
+                     years_21_more="6",
+                     Scantron_Error="*")
+  c1 <- ordered(c1, c("Less_than_1_year", "years_1_5", "years_6_10", "years_11_15","years_16_20","years_21_more","Scantron_Error"))
+  
+  new.d <- data.frame(new.d, c1)
+  new.d <- apply_labels(new.d, c1 = "living period")
+  temp.d <- data.frame (new.d, c1)  
+  
+  result<-questionr::freq(temp.d$c1, cum = TRUE ,total = TRUE)
+  kable(result, format = "simple", align = 'l')
+```
+
+## LA County
+```{r c11, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Los Angeles County.80"), ]
+  result<-questionr::freq(temp.dd$c1, cum = TRUE ,total = TRUE)
+  kable(result, format = "simple", align = 'l')
+rm(temp.dd) 
+```
+
+## Northern CA
+```{r c12, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Northern CA.30"), ]
+  result<-questionr::freq(temp.dd$c1, cum = TRUE ,total = TRUE)
+  kable(result, format = "simple", align = 'l')
+rm(temp.dd) 
+```
+
+## Greater CA
+```{r c13, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Greater CA.10"), ]
+  result<-questionr::freq(temp.dd$c1, cum = TRUE ,total = TRUE)
+  kable(result, format = "simple", align = 'l')
+rm(temp.dd) 
+```
+
+## Detroit
+```{r c14, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Detroit.60"), ]
+  result<-questionr::freq(temp.dd$c1, cum = TRUE ,total = TRUE)
+  kable(result, format = "simple", align = 'l')
+rm(temp.dd) 
+```
+
+## Louisiana
+```{r c15, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Louisiana.40"), ]
+  result<-questionr::freq(temp.dd$c1, cum = TRUE ,total = TRUE)
+  kable(result, format = "simple", align = 'l')
+rm(temp.dd) 
+```
+
+## Georgia
+```{r c16, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Georgia.20"), ]
+  result<-questionr::freq(temp.dd$c1, cum = TRUE ,total = TRUE)
+  kable(result, format = "simple", align = 'l')
+rm(temp.dd) 
+```
+
+## Michigan
+```{r c17, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Michigan.61"), ]
+  result<-questionr::freq(temp.dd$c1, cum = TRUE ,total = TRUE)
+  kable(result, format = "simple", align = 'l')
+rm(temp.dd) 
+```
+
+# D1 {.tabset}
+- D1. In the following questions, we are interested in your perceptions about the way other people have treated you because of your race/ethnicity or skin color.
+
+## All data
+```{r D1}
+# a. At any time in your life, have you ever been unfairly fired from a job or been unfairly denied a promotion?
+  d1aa <- as.factor(d[,"d1aa"])
+  levels(d1aa) <- list(No="1",
+                     Yes="2",
+                     Scantron_Error="*")
+  d1aa <- ordered(d1aa, c("No","Yes","Scantron_Error"))
+  
+  new.d <- data.frame(new.d, d1aa)
+  new.d <- apply_labels(new.d, d1aa = "fired or denied a promotion")
+  temp.d <- data.frame (new.d, d1aa)  
+  
+  result<-questionr::freq(temp.d$d1aa,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "a. At any time in your life, have you ever been unfairly fired from a job or been unfairly denied a promotion?
+")
+# b. For unfair reasons, have you ever not been hired for a job?
+  d1ba <- as.factor(d[,"d1ba"])
+  levels(d1ba) <- list(No="1",
+                     Yes="2",
+                     Scantron_Error="*")
+  d1ba <- ordered(d1ba, c("No","Yes","Scantron_Error"))
+  
+  new.d <- data.frame(new.d, d1ba)
+  new.d <- apply_labels(new.d, d1ba = "not be hired")
+  temp.d <- data.frame (new.d, d1ba)  
+  
+  result<-questionr::freq(temp.d$d1ba,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "b. For unfair reasons, have you ever not been hired for a job?")
+# c. Have you ever been unfairly stopped, searched, questioned, physically threatened or abused by the police?
+  d1ca <- as.factor(d[,"d1ca"])
+  levels(d1ca) <- list(No="1",
+                     Yes="2",
+                     Scantron_Error="*")
+  d1ca <- ordered(d1ca, c( "No","Yes","Scantron_Error"))
+  
+  new.d <- data.frame(new.d, d1ca)
+  new.d <- apply_labels(new.d, d1ca = "By police")
+  temp.d <- data.frame (new.d, d1ca)  
+  
+  result<-questionr::freq(temp.d$d1ca,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "c. Have you ever been unfairly stopped, searched, questioned, physically threatened or abused by the police?")
+# d. Have you ever been unfairly discouraged by a teacher or advisor from continuing your education?
+  d1da <- as.factor(d[,"d1da"])
+  levels(d1da) <- list(No="1",
+                     Yes="2",
+                     Scantron_Error="*")
+  d1da <- ordered(d1da, c( "No","Yes","Scantron_Error"))
+  
+  new.d <- data.frame(new.d, d1da)
+  new.d <- apply_labels(new.d, d1da = "unfair education")
+  temp.d <- data.frame (new.d, d1da)  
+  
+  result<-questionr::freq(temp.d$d1da,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "d. Have you ever been unfairly discouraged by a teacher or advisor from continuing your education?")
+# e. Have you ever been unfairly prevented from moving into a neighborhood because the landlord or a realtor refused to sell or rent you a house or apartment?
+  d1ea <- as.factor(d[,"d1ea"])
+  levels(d1ea) <- list(No="1",
+                     Yes="2",
+                     Scantron_Error="*")
+  d1ea <- ordered(d1ea, c("No","Yes","Scantron_Error"))
+  
+  new.d <- data.frame(new.d, d1ea)
+  new.d <- apply_labels(new.d, d1ea = "Paternal Grandfather (Dad’s side)")
+  temp.d <- data.frame (new.d, d1ea)  
+  
+  result<-questionr::freq(temp.d$d1ea,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "e. Have you ever been unfairly prevented from moving into a neighborhood because the landlord or a realtor refused to sell or rent you a house or apartment?")
+# f.   Have   you   ever   been   unfairly denied a bank loan?
+  d1fa <- as.factor(d[,"d1fa"])
+  levels(d1fa) <- list(No="1",
+                     Yes="2",
+                     Scantron_Error="*")
+  d1fa <- ordered(d1fa, c("No","Yes","Scantron_Error"))
+  
+  new.d <- data.frame(new.d, d1fa)
+  new.d <- apply_labels(new.d, d1fa = "Bank loan")
+  temp.d <- data.frame (new.d, d1fa)  
+  
+  result<-questionr::freq(temp.d$d1fa,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "f. Have you ever been unfairly denied a bank loan?")
+# g.   Have   you   ever   been   unfairly treated when getting medical care?
+  d1ga <- as.factor(d[,"d1ga"])
+  levels(d1ga) <- list(No="1",
+                     Yes="2",
+                     Scantron_Error="*")
+  d1ga <- ordered(d1ga, c("No","Yes","Scantron_Error"))
+  
+  new.d <- data.frame(new.d, d1ga)
+  new.d <- apply_labels(new.d, d1ga = "unfair medical care")
+  temp.d <- data.frame (new.d, d1ga)  
+  
+  result<-questionr::freq(temp.d$d1ga,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "g. Have you ever been unfairly treated when getting medical care?")
+```
+
+## LA County
+```{r D11, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Los Angeles County.80"), ]
+# a. At any time in your life, have you ever been unfairly fired from a job or been unfairly denied a promotion?
+  result<-questionr::freq(temp.dd$d1aa,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "a. At any time in your life, have you ever been unfairly fired from a job or been unfairly denied a promotion?")
+# b. For unfair reasons, have you ever not been hired for a job?
+  result<-questionr::freq(temp.dd$d1ba,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "b. For unfair reasons, have you ever not been hired for a job?")
+# c. Have you ever been unfairly stopped, searched, questioned, physically threatened or abused by the police?
+  result<-questionr::freq(temp.dd$d1ca,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "c. Have you ever been unfairly stopped, searched, questioned, physically threatened or abused by the police?")
+# d. Have you ever been unfairly discouraged by a teacher or advisor from continuing your education?
+  result<-questionr::freq(temp.dd$d1da,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "d. Have you ever been unfairly discouraged by a teacher or advisor from continuing your education?")
+# e. Have you ever been unfairly prevented from moving into a neighborhood because the landlord or a realtor refused to sell or rent you a house or apartment?
+  result<-questionr::freq(temp.dd$d1ea,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "e. Have you ever been unfairly prevented from moving into a neighborhood because the landlord or a realtor refused to sell or rent you a house or apartment?")
+# f. Have you ever been unfairly denied a bank loan? 
+  result<-questionr::freq(temp.dd$d1fa,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "f. Have you ever been unfairly denied a bank loan? ")
+# g. Have you ever been unfairly treated when getting medical care?
+  result<-questionr::freq(temp.dd$d1ga,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "g. Have you ever been unfairly treated when getting medical care?")
+rm(temp.dd) 
+```
+
+## Northern CA
+```{r D12, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Northern CA.30"), ]
+# a. At any time in your life, have you ever been unfairly fired from a job or been unfairly denied a promotion?
+  result<-questionr::freq(temp.dd$d1aa,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "a. At any time in your life, have you ever been unfairly fired from a job or been unfairly denied a promotion?")
+# b. For unfair reasons, have you ever not been hired for a job?
+  result<-questionr::freq(temp.dd$d1ba,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "b. For unfair reasons, have you ever not been hired for a job?")
+# c. Have you ever been unfairly stopped, searched, questioned, physically threatened or abused by the police?
+  result<-questionr::freq(temp.dd$d1ca,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "c. Have you ever been unfairly stopped, searched, questioned, physically threatened or abused by the police?")
+# d. Have you ever been unfairly discouraged by a teacher or advisor from continuing your education?
+  result<-questionr::freq(temp.dd$d1da,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "d. Have you ever been unfairly discouraged by a teacher or advisor from continuing your education?")
+# e. Have you ever been unfairly prevented from moving into a neighborhood because the landlord or a realtor refused to sell or rent you a house or apartment?
+  result<-questionr::freq(temp.dd$d1ea,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "e. Have you ever been unfairly prevented from moving into a neighborhood because the landlord or a realtor refused to sell or rent you a house or apartment?")
+# f. Have you ever been unfairly denied a bank loan? 
+  result<-questionr::freq(temp.dd$d1fa,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "f. Have you ever been unfairly denied a bank loan? ")
+# g. Have you ever been unfairly treated when getting medical care?
+  result<-questionr::freq(temp.dd$d1ga,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "g. Have you ever been unfairly treated when getting medical care?")
+rm(temp.dd) 
+```
+
+## Greater CA
+```{r D13, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Greater CA.10"), ]
+# a. At any time in your life, have you ever been unfairly fired from a job or been unfairly denied a promotion?
+  result<-questionr::freq(temp.dd$d1aa,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "a. At any time in your life, have you ever been unfairly fired from a job or been unfairly denied a promotion?")
+# b. For unfair reasons, have you ever not been hired for a job?
+  result<-questionr::freq(temp.dd$d1ba,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "b. For unfair reasons, have you ever not been hired for a job?")
+# c. Have you ever been unfairly stopped, searched, questioned, physically threatened or abused by the police?
+  result<-questionr::freq(temp.dd$d1ca,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "c. Have you ever been unfairly stopped, searched, questioned, physically threatened or abused by the police?")
+# d. Have you ever been unfairly discouraged by a teacher or advisor from continuing your education?
+  result<-questionr::freq(temp.dd$d1da,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "d. Have you ever been unfairly discouraged by a teacher or advisor from continuing your education?")
+# e. Have you ever been unfairly prevented from moving into a neighborhood because the landlord or a realtor refused to sell or rent you a house or apartment?
+  result<-questionr::freq(temp.dd$d1ea,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "e. Have you ever been unfairly prevented from moving into a neighborhood because the landlord or a realtor refused to sell or rent you a house or apartment?")
+# f. Have you ever been unfairly denied a bank loan? 
+  result<-questionr::freq(temp.dd$d1fa,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "f. Have you ever been unfairly denied a bank loan? ")
+# g. Have you ever been unfairly treated when getting medical care?
+  result<-questionr::freq(temp.dd$d1ga,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "g. Have you ever been unfairly treated when getting medical care?")
+rm(temp.dd) 
+```
+
+## Detroit
+```{r D14, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Detroit.60"), ]
+# a. At any time in your life, have you ever been unfairly fired from a job or been unfairly denied a promotion?
+  result<-questionr::freq(temp.dd$d1aa,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "a. At any time in your life, have you ever been unfairly fired from a job or been unfairly denied a promotion?")
+# b. For unfair reasons, have you ever not been hired for a job?
+  result<-questionr::freq(temp.dd$d1ba,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "b. For unfair reasons, have you ever not been hired for a job?")
+# c. Have you ever been unfairly stopped, searched, questioned, physically threatened or abused by the police?
+  result<-questionr::freq(temp.dd$d1ca,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "c. Have you ever been unfairly stopped, searched, questioned, physically threatened or abused by the police?")
+# d. Have you ever been unfairly discouraged by a teacher or advisor from continuing your education?
+  result<-questionr::freq(temp.dd$d1da,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "d. Have you ever been unfairly discouraged by a teacher or advisor from continuing your education?")
+# e. Have you ever been unfairly prevented from moving into a neighborhood because the landlord or a realtor refused to sell or rent you a house or apartment?
+  result<-questionr::freq(temp.dd$d1ea,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "e. Have you ever been unfairly prevented from moving into a neighborhood because the landlord or a realtor refused to sell or rent you a house or apartment?")
+# f. Have you ever been unfairly denied a bank loan? 
+  result<-questionr::freq(temp.dd$d1fa,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "f. Have you ever been unfairly denied a bank loan? ")
+# g. Have you ever been unfairly treated when getting medical care?
+  result<-questionr::freq(temp.dd$d1ga,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "g. Have you ever been unfairly treated when getting medical care?")
+rm(temp.dd) 
+```
+
+## Louisiana
+```{r D15, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Louisiana.40"), ]
+# a. At any time in your life, have you ever been unfairly fired from a job or been unfairly denied a promotion?
+  result<-questionr::freq(temp.dd$d1aa,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "a. At any time in your life, have you ever been unfairly fired from a job or been unfairly denied a promotion?")
+# b. For unfair reasons, have you ever not been hired for a job?
+  result<-questionr::freq(temp.dd$d1ba,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "b. For unfair reasons, have you ever not been hired for a job?")
+# c. Have you ever been unfairly stopped, searched, questioned, physically threatened or abused by the police?
+  result<-questionr::freq(temp.dd$d1ca,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "c. Have you ever been unfairly stopped, searched, questioned, physically threatened or abused by the police?")
+# d. Have you ever been unfairly discouraged by a teacher or advisor from continuing your education?
+  result<-questionr::freq(temp.dd$d1da,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "d. Have you ever been unfairly discouraged by a teacher or advisor from continuing your education?")
+# e. Have you ever been unfairly prevented from moving into a neighborhood because the landlord or a realtor refused to sell or rent you a house or apartment?
+  result<-questionr::freq(temp.dd$d1ea,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "e. Have you ever been unfairly prevented from moving into a neighborhood because the landlord or a realtor refused to sell or rent you a house or apartment?")
+# f. Have you ever been unfairly denied a bank loan? 
+  result<-questionr::freq(temp.dd$d1fa,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "f. Have you ever been unfairly denied a bank loan? ")
+# g. Have you ever been unfairly treated when getting medical care?
+  result<-questionr::freq(temp.dd$d1ga,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "g. Have you ever been unfairly treated when getting medical care?")
+rm(temp.dd) 
+```
+
+## Georgia
+```{r D16, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Georgia.20"), ]
+# a. At any time in your life, have you ever been unfairly fired from a job or been unfairly denied a promotion?
+  result<-questionr::freq(temp.dd$d1aa,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "a. At any time in your life, have you ever been unfairly fired from a job or been unfairly denied a promotion?")
+# b. For unfair reasons, have you ever not been hired for a job?
+  result<-questionr::freq(temp.dd$d1ba,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "b. For unfair reasons, have you ever not been hired for a job?")
+# c. Have you ever been unfairly stopped, searched, questioned, physically threatened or abused by the police?
+  result<-questionr::freq(temp.dd$d1ca,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "c. Have you ever been unfairly stopped, searched, questioned, physically threatened or abused by the police?")
+# d. Have you ever been unfairly discouraged by a teacher or advisor from continuing your education?
+  result<-questionr::freq(temp.dd$d1da,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "d. Have you ever been unfairly discouraged by a teacher or advisor from continuing your education?")
+# e. Have you ever been unfairly prevented from moving into a neighborhood because the landlord or a realtor refused to sell or rent you a house or apartment?
+  result<-questionr::freq(temp.dd$d1ea,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "e. Have you ever been unfairly prevented from moving into a neighborhood because the landlord or a realtor refused to sell or rent you a house or apartment?")
+# f. Have you ever been unfairly denied a bank loan? 
+  result<-questionr::freq(temp.dd$d1fa,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "f. Have you ever been unfairly denied a bank loan? ")
+# g. Have you ever been unfairly treated when getting medical care?
+  result<-questionr::freq(temp.dd$d1ga,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "g. Have you ever been unfairly treated when getting medical care?")
+rm(temp.dd) 
+```
+
+## Michigan
+```{r D17, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Michigan.61"), ]
+# a. At any time in your life, have you ever been unfairly fired from a job or been unfairly denied a promotion?
+  result<-questionr::freq(temp.dd$d1aa,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "a. At any time in your life, have you ever been unfairly fired from a job or been unfairly denied a promotion?")
+# b. For unfair reasons, have you ever not been hired for a job?
+  result<-questionr::freq(temp.dd$d1ba,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "b. For unfair reasons, have you ever not been hired for a job?")
+# c. Have you ever been unfairly stopped, searched, questioned, physically threatened or abused by the police?
+  result<-questionr::freq(temp.dd$d1ca,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "c. Have you ever been unfairly stopped, searched, questioned, physically threatened or abused by the police?")
+# d. Have you ever been unfairly discouraged by a teacher or advisor from continuing your education?
+  result<-questionr::freq(temp.dd$d1da,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "d. Have you ever been unfairly discouraged by a teacher or advisor from continuing your education?")
+# e. Have you ever been unfairly prevented from moving into a neighborhood because the landlord or a realtor refused to sell or rent you a house or apartment?
+  result<-questionr::freq(temp.dd$d1ea,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "e. Have you ever been unfairly prevented from moving into a neighborhood because the landlord or a realtor refused to sell or rent you a house or apartment?")
+# f. Have you ever been unfairly denied a bank loan? 
+  result<-questionr::freq(temp.dd$d1fa,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "f. Have you ever been unfairly denied a bank loan? ")
+# g. Have you ever been unfairly treated when getting medical care?
+  result<-questionr::freq(temp.dd$d1ga,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "g. Have you ever been unfairly treated when getting medical care?")
+rm(temp.dd) 
+```
+
+
+# D2 {.tabset}
+- D2. These next questions are about your current feelings or perceptions regarding healthcare organizations (places where you might get healthcare, like a hospital or clinic). Indicate your level of agreement or disagreement with each statement.
+
+## All data
+```{r D2: Medical Mistrust}
+# a. Patients have sometimes been deceived or misled at hospitals.
+  d2a <- as.factor(d[,"d2a"])
+  levels(d2a) <- list(Strongly_Agree="1",
+                     Somewhat_Agree="2",
+                     Somewhat_Disagree="3",
+                     Strongly_Disagree="4",
+                     Scantron_Error="*")
+  d2a <- ordered(d2a, c("Strongly_Agree","Somewhat_Agree","Somewhat_Disagree","Strongly_Disagree","Scantron_Error"))
+  
+  new.d <- data.frame(new.d, d2a)
+  new.d <- apply_labels(new.d, d2a = "deceived or misled")
+  temp.d <- data.frame (new.d, d2a)  
+  
+  result<-questionr::freq(temp.d$d2a,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "a. Patients have sometimes been deceived or misled at hospitals.")
+# b. Hospitals often want to know more about your personal affairs or business than they really need to know.
+  d2b <- as.factor(d[,"d2b"])
+  levels(d2b) <- list(Strongly_Agree="1",
+                     Somewhat_Agree="2",
+                     Somewhat_Disagree="3",
+                     Strongly_Disagree="4",
+                     Scantron_Error="*")
+  d2b <- ordered(d2b, c("Strongly_Agree","Somewhat_Agree","Somewhat_Disagree","Strongly_Disagree","Scantron_Error"))
+  
+  new.d <- data.frame(new.d, d2b)
+  new.d <- apply_labels(new.d, d2b = "personal affairs")
+  temp.d <- data.frame (new.d, d2b)  
+  
+  result<-questionr::freq(temp.d$d2b,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "b. Hospitals often want to know more about your personal affairs or business than they really need to know.")
+# c. Hospitals have sometimes done harmful experiments on patients without their knowledge.
+  d2c <- as.factor(d[,"d2c"])
+  levels(d2c) <- list(Strongly_Agree="1",
+                     Somewhat_Agree="2",
+                     Somewhat_Disagree="3",
+                     Strongly_Disagree="4",
+                     Scantron_Error="*")
+  d2c <- ordered(d2c, c("Strongly_Agree","Somewhat_Agree","Somewhat_Disagree","Strongly_Disagree","Scantron_Error"))
+  
+  new.d <- data.frame(new.d, d2c)
+  new.d <- apply_labels(new.d, d2c = "harmful experiments")
+  temp.d <- data.frame (new.d, d2c)  
+  
+  result<-questionr::freq(temp.d$d2c,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "c. Hospitals have sometimes done harmful experiments on patients without their knowledge.")
+# d. Rich patients receive better care at hospitals than poor patients.
+  d2d <- as.factor(d[,"d2d"])
+  levels(d2d) <- list(Strongly_Agree="1",
+                     Somewhat_Agree="2",
+                     Somewhat_Disagree="3",
+                     Strongly_Disagree="4",
+                     Scantron_Error="*")
+  d2d <- ordered(d2d, c( "Strongly_Agree","Somewhat_Agree","Somewhat_Disagree","Strongly_Disagree","Scantron_Error"))
+  
+  new.d <- data.frame(new.d, d2d)
+  new.d <- apply_labels(new.d, d2d = "Rich patients better care")
+  temp.d <- data.frame (new.d, d2d)  
+  
+  result<-questionr::freq(temp.d$d2d,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "d. Rich patients receive better care at hospitals than poor patients.")
+# e. Male patients receive better care at hospitals than female patients.
+  d2e <- as.factor(d[,"d2e"])
+  levels(d2e) <- list(Strongly_Agree="1",
+                     Somewhat_Agree="2",
+                     Somewhat_Disagree="3",
+                     Strongly_Disagree="4",
+                     Scantron_Error="*")
+  d2e <- ordered(d2e, c("Strongly_Agree","Somewhat_Agree","Somewhat_Disagree","Strongly_Disagree","Scantron_Error"))
+  
+  new.d <- data.frame(new.d, d2e)
+  new.d <- apply_labels(new.d, d2e = "Male patients better care")
+  temp.d <- data.frame (new.d, d2e)  
+  
+  result<-questionr::freq(temp.d$d2e,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "e. Male patients receive better care at hospitals than female patients.")
+```
+
+## LA County
+```{r D21, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Los Angeles County.80"), ]
+# a. Patients have sometimes been deceived or misled at hospitals.
+  result<-questionr::freq(temp.dd$d2a,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "a. Patients have sometimes been deceived or misled at hospitals.")
+# b. Hospitals often want to know more about your personal affairs or business than they really need to know.
+  result<-questionr::freq(temp.dd$d2b,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "b. Hospitals often want to know more about your personal affairs or business than they really need to know.")
+# c. Hospitals have sometimes done harmful experiments on patients without their knowledge.
+  result<-questionr::freq(temp.dd$d2c,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "c. Hospitals have sometimes done harmful experiments on patients without their knowledge.")
+# d. Rich patients receive better care at hospitals than poor patients.
+  result<-questionr::freq(temp.dd$d2d,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "d. Rich patients receive better care at hospitals than poor patients.")
+# e. Male patients receive better care at hospitals than female patients.
+  result<-questionr::freq(temp.dd$d2e,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "e. Male patients receive better care at hospitals than female patients.")
+rm(temp.dd) 
+```
+
+## Northern CA
+```{r D22, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Northern CA.30"), ]
+# a. Patients have sometimes been deceived or misled at hospitals.
+  result<-questionr::freq(temp.dd$d2a,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "a. Patients have sometimes been deceived or misled at hospitals.")
+# b. Hospitals often want to know more about your personal affairs or business than they really need to know.
+  result<-questionr::freq(temp.dd$d2b,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "b. Hospitals often want to know more about your personal affairs or business than they really need to know.")
+# c. Hospitals have sometimes done harmful experiments on patients without their knowledge.
+  result<-questionr::freq(temp.dd$d2c,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "c. Hospitals have sometimes done harmful experiments on patients without their knowledge.")
+# d. Rich patients receive better care at hospitals than poor patients.
+  result<-questionr::freq(temp.dd$d2d,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "d. Rich patients receive better care at hospitals than poor patients.")
+# e. Male patients receive better care at hospitals than female patients.
+  result<-questionr::freq(temp.dd$d2e,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "e. Male patients receive better care at hospitals than female patients.")
+rm(temp.dd) 
+```
+
+## Greater CA
+```{r D23, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Greater CA.10"), ]
+# a. Patients have sometimes been deceived or misled at hospitals.
+  result<-questionr::freq(temp.dd$d2a,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "a. Patients have sometimes been deceived or misled at hospitals.")
+# b. Hospitals often want to know more about your personal affairs or business than they really need to know.
+  result<-questionr::freq(temp.dd$d2b,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "b. Hospitals often want to know more about your personal affairs or business than they really need to know.")
+# c. Hospitals have sometimes done harmful experiments on patients without their knowledge.
+  result<-questionr::freq(temp.dd$d2c,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "c. Hospitals have sometimes done harmful experiments on patients without their knowledge.")
+# d. Rich patients receive better care at hospitals than poor patients.
+  result<-questionr::freq(temp.dd$d2d,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "d. Rich patients receive better care at hospitals than poor patients.")
+# e. Male patients receive better care at hospitals than female patients.
+  result<-questionr::freq(temp.dd$d2e,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "e. Male patients receive better care at hospitals than female patients.")
+rm(temp.dd) 
+```
+
+## Detroit
+```{r D24, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Detroit.60"), ]
+# a. Patients have sometimes been deceived or misled at hospitals.
+  result<-questionr::freq(temp.dd$d2a,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "a. Patients have sometimes been deceived or misled at hospitals.")
+# b. Hospitals often want to know more about your personal affairs or business than they really need to know.
+  result<-questionr::freq(temp.dd$d2b,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "b. Hospitals often want to know more about your personal affairs or business than they really need to know.")
+# c. Hospitals have sometimes done harmful experiments on patients without their knowledge.
+  result<-questionr::freq(temp.dd$d2c,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "c. Hospitals have sometimes done harmful experiments on patients without their knowledge.")
+# d. Rich patients receive better care at hospitals than poor patients.
+  result<-questionr::freq(temp.dd$d2d,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "d. Rich patients receive better care at hospitals than poor patients.")
+# e. Male patients receive better care at hospitals than female patients.
+  result<-questionr::freq(temp.dd$d2e,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "e. Male patients receive better care at hospitals than female patients.")
+rm(temp.dd) 
+```
+
+## Louisiana
+```{r D25, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Louisiana.40"), ]
+# a. Patients have sometimes been deceived or misled at hospitals.
+  result<-questionr::freq(temp.dd$d2a,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "a. Patients have sometimes been deceived or misled at hospitals.")
+# b. Hospitals often want to know more about your personal affairs or business than they really need to know.
+  result<-questionr::freq(temp.dd$d2b,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "b. Hospitals often want to know more about your personal affairs or business than they really need to know.")
+# c. Hospitals have sometimes done harmful experiments on patients without their knowledge.
+  result<-questionr::freq(temp.dd$d2c,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "c. Hospitals have sometimes done harmful experiments on patients without their knowledge.")
+# d. Rich patients receive better care at hospitals than poor patients.
+  result<-questionr::freq(temp.dd$d2d,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "d. Rich patients receive better care at hospitals than poor patients.")
+# e. Male patients receive better care at hospitals than female patients.
+  result<-questionr::freq(temp.dd$d2e,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "e. Male patients receive better care at hospitals than female patients.")
+rm(temp.dd) 
+```
+
+## Georgia
+```{r D26, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Georgia.20"), ]
+# a. Patients have sometimes been deceived or misled at hospitals.
+  result<-questionr::freq(temp.dd$d2a,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "a. Patients have sometimes been deceived or misled at hospitals.")
+# b. Hospitals often want to know more about your personal affairs or business than they really need to know.
+  result<-questionr::freq(temp.dd$d2b,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "b. Hospitals often want to know more about your personal affairs or business than they really need to know.")
+# c. Hospitals have sometimes done harmful experiments on patients without their knowledge.
+  result<-questionr::freq(temp.dd$d2c,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "c. Hospitals have sometimes done harmful experiments on patients without their knowledge.")
+# d. Rich patients receive better care at hospitals than poor patients.
+  result<-questionr::freq(temp.dd$d2d,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "d. Rich patients receive better care at hospitals than poor patients.")
+# e. Male patients receive better care at hospitals than female patients.
+  result<-questionr::freq(temp.dd$d2e,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "e. Male patients receive better care at hospitals than female patients.")
+rm(temp.dd) 
+```
+
+## Michigan
+```{r D27, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Michigan.61"), ]
+# a. Patients have sometimes been deceived or misled at hospitals.
+  result<-questionr::freq(temp.dd$d2a,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "a. Patients have sometimes been deceived or misled at hospitals.")
+# b. Hospitals often want to know more about your personal affairs or business than they really need to know.
+  result<-questionr::freq(temp.dd$d2b,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "b. Hospitals often want to know more about your personal affairs or business than they really need to know.")
+# c. Hospitals have sometimes done harmful experiments on patients without their knowledge.
+  result<-questionr::freq(temp.dd$d2c,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "c. Hospitals have sometimes done harmful experiments on patients without their knowledge.")
+# d. Rich patients receive better care at hospitals than poor patients.
+  result<-questionr::freq(temp.dd$d2d,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "d. Rich patients receive better care at hospitals than poor patients.")
+# e. Male patients receive better care at hospitals than female patients.
+  result<-questionr::freq(temp.dd$d2e,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "e. Male patients receive better care at hospitals than female patients.")
+rm(temp.dd) 
+```
+
+
+# D3 {.tabset}
+- D3. In your day-to-day life, during the following 3 time periods, how often have any of the following things happened to you because of your race/ethnicity?
+
+## All data
+```{r D3: Everyday discrimination}
+# a. You have been treated with less respect than other people
+  d3a1 <- as.factor(d[,"d3a1"])
+  levels(d3a1) <- list(Never="1",
+                     Rarely="2",
+                     Sometimes="3",
+                     Often="4",
+                     Scantron_Error="*")
+  d3a1 <- ordered(d3a1, c("Never","Rarely","Sometimes","Often","Scantron_Error"))
+  
+  new.d <- data.frame(new.d, d3a1)
+  new.d <- apply_labels(new.d, d3a1 = "less respect")
+  temp.d <- data.frame (new.d, d3a1)  
+  
+  result<-questionr::freq(temp.d$d3a1,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "a. You have been treated with less respect than other people")
+# b. You have received poorer service than other people at restaurants or stores
+  d3b1 <- as.factor(d[,"d3b1"])
+  levels(d3b1) <- list(Never="1",
+                     Rarely="2",
+                     Sometimes="3",
+                     Often="4",
+                     Scantron_Error="*")
+  d3b1 <- ordered(d3b1, c("Never","Rarely","Sometimes","Often","Scantron_Error"))
+  
+  new.d <- data.frame(new.d, d3b1)
+  new.d <- apply_labels(new.d, d3b1 = "poorer service")
+  temp.d <- data.frame (new.d, d3b1)  
+  
+  result<-questionr::freq(temp.d$d3b1,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "b. You have received poorer service than other people at restaurants or stores")
+# c. People have acted as if they think you are not smart
+  d3c1 <- as.factor(d[,"d3c1"])
+  levels(d3c1) <- list(Never="1",
+                     Rarely="2",
+                     Sometimes="3",
+                     Often="4",
+                     Scantron_Error="*")
+  d3c1 <- ordered(d3c1, c("Never","Rarely","Sometimes","Often","Scantron_Error"))
+  
+  new.d <- data.frame(new.d, d3c1)
+  new.d <- apply_labels(new.d, d3c1 = "think you are not smart")
+  temp.d <- data.frame (new.d, d3c1)  
+  
+  result<-questionr::freq(temp.d$d3c1,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "c. People have acted as if they think you are not smart")
+# d. People have acted as if they are afraid of you
+  d3d1 <- as.factor(d[,"d3d1"])
+  levels(d3d1) <- list(Never="1",
+                     Rarely="2",
+                     Sometimes="3",
+                     Often="4",
+                     Scantron_Error="*")
+  d3d1 <- ordered(d3d1, c("Never","Rarely","Sometimes","Often","Scantron_Error"))
+  
+  new.d <- data.frame(new.d, d3d1)
+  new.d <- apply_labels(new.d, d3d1 = "be afraid of you")
+  temp.d <- data.frame (new.d, d3d1)  
+  
+  result<-questionr::freq(temp.d$d3d1,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "d. People have acted as if they are afraid of you")
+# e. People have acted as if they think you are dishonest
+  d3e1 <- as.factor(d[,"d3e1"])
+  levels(d3e1) <- list(Never="1",
+                     Rarely="2",
+                     Sometimes="3",
+                     Often="4",
+                     Scantron_Error="*")
+  d3e1 <- ordered(d3e1, c("Never","Rarely","Sometimes","Often","Scantron_Error"))
+  
+  new.d <- data.frame(new.d, d3e1)
+  new.d <- apply_labels(new.d, d3e1 = "think you are dishonest")
+  temp.d <- data.frame (new.d, d3e1)  
+  
+  result<-questionr::freq(temp.d$d3e1,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "e. People have acted as if they think you are dishonest")
+# f. People have acted as if they’re better than you are
+  d3f1 <- as.factor(d[,"d3f1"])
+  levels(d3f1) <- list(Never="1",
+                     Rarely="2",
+                     Sometimes="3",
+                     Often="4",
+                     Scantron_Error="*")
+  d3f1 <- ordered(d3f1, c("Never","Rarely","Sometimes","Often","Scantron_Error"))
+  
+  new.d <- data.frame(new.d, d3f1)
+  new.d <- apply_labels(new.d, d3f1 = "better than you")
+  temp.d <- data.frame (new.d, d3f1)  
+  
+  result<-questionr::freq(temp.d$d3f1,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "f. People have acted as if they’re better than you are")
+# g. You have been called names or insulted
+  d3g1 <- as.factor(d[,"d3g1"])
+  levels(d3g1) <- list(Never="1",
+                     Rarely="2",
+                     Sometimes="3",
+                     Often="4",
+                     Scantron_Error="*")
+  d3g1 <- ordered(d3g1, c("Never","Rarely","Sometimes","Often","Scantron_Error"))
+  
+  new.d <- data.frame(new.d, d3g1)
+  new.d <- apply_labels(new.d, d3g1 = "called names or insulted")
+  temp.d <- data.frame (new.d, d3g1)  
+  
+  result<-questionr::freq(temp.d$d3g1,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "g. You have been called names or insulted")
+# h. You have been threatened or harassed
+  d3h1 <- as.factor(d[,"d3h1"])
+  levels(d3h1) <- list(Never="1",
+                     Rarely="2",
+                     Sometimes="3",
+                     Often="4",
+                     Scantron_Error="*")
+  d3h1 <- ordered(d3h1, c("Never","Rarely","Sometimes","Often","Scantron_Error"))
+  
+  new.d <- data.frame(new.d, d3h1)
+  new.d <- apply_labels(new.d, d3h1 = "threatened or harassed")
+  temp.d <- data.frame (new.d, d3h1)  
+  
+  result<-questionr::freq(temp.d$d3h1,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "h. You have been threatened or harassed")
+# i. You have been followed around in stores
+  d3i1 <- as.factor(d[,"d3i1"])
+  levels(d3i1) <- list(Never="1",
+                     Rarely="2",
+                     Sometimes="3",
+                     Often="4",
+                     Scantron_Error="*")
+  d3i1 <- ordered(d3i1, c("Never","Rarely","Sometimes","Often","Scantron_Error"))
+  
+  new.d <- data.frame(new.d, d3i1)
+  new.d <- apply_labels(new.d, d3i1 = "threatened or harassed")
+  temp.d <- data.frame (new.d, d3i1)  
+  
+  result<-questionr::freq(temp.d$d3i1,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "h. You have been threatened or harassed")
+```
+
+
+## LA County
+```{r D31, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Los Angeles County.80"), ]
+# a. You have been treated with less respect than other people
+  result<-questionr::freq(temp.dd$d3a1,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "a. You have been treated with less respect than other people")
+# b. You have received poorer service than other people at restaurants or stores
+  result<-questionr::freq(temp.dd$d3b1,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "b. You have received poorer service than other people at restaurants or stores")
+# c. People have acted as if they think you are not smart
+  result<-questionr::freq(temp.dd$d3c1,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "c. People have acted as if they think you are not smart")
+# d. People have acted as if they are afraid of you
+  result<-questionr::freq(temp.dd$d3d1,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "d. Rich patients receive better care at hospitals than poor patients.")
+# e. People have acted as if they think you are dishonest
+  result<-questionr::freq(temp.dd$d3e1,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "e. Male patients receive better care at hospitals than female patients.")
+# f. People have acted as if they’re better than you are
+  result<-questionr::freq(temp.dd$d3f1,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "f. People have acted as if they’re better than you are")
+# g. You have been called names or insulted
+  result<-questionr::freq(temp.dd$d3g1,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "g. You have been called names or insulted")
+# h. You have been threatened or harassed
+  result<-questionr::freq(temp.dd$d3h1,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "h. You have been threatened or harassed")
+# i. You have been followed around in stores
+  result<-questionr::freq(temp.dd$d3i1,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "i. You have been followed around in stores")
+rm(temp.dd) 
+```
+
+## Northern CA
+```{r D32, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Northern CA.30"), ]
+# a. You have been treated with less respect than other people
+  result<-questionr::freq(temp.dd$d3a1,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "a. You have been treated with less respect than other people")
+# b. You have received poorer service than other people at restaurants or stores
+  result<-questionr::freq(temp.dd$d3b1,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "b. You have received poorer service than other people at restaurants or stores")
+# c. People have acted as if they think you are not smart
+  result<-questionr::freq(temp.dd$d3c1,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "c. People have acted as if they think you are not smart")
+# d. People have acted as if they are afraid of you
+  result<-questionr::freq(temp.dd$d3d1,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "d. Rich patients receive better care at hospitals than poor patients.")
+# e. People have acted as if they think you are dishonest
+  result<-questionr::freq(temp.dd$d3e1,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "e. Male patients receive better care at hospitals than female patients.")
+# f. People have acted as if they’re better than you are
+  result<-questionr::freq(temp.dd$d3f1,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "f. People have acted as if they’re better than you are")
+# g. You have been called names or insulted
+  result<-questionr::freq(temp.dd$d3g1,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "g. You have been called names or insulted")
+# h. You have been threatened or harassed
+  result<-questionr::freq(temp.dd$d3h1,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "h. You have been threatened or harassed")
+# i. You have been followed around in stores
+  result<-questionr::freq(temp.dd$d3i1,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "i. You have been followed around in stores")
+rm(temp.dd) 
+```
+
+## Greater CA
+```{r D33, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Greater CA.10"), ]
+# a. You have been treated with less respect than other people
+  result<-questionr::freq(temp.dd$d3a1,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "a. You have been treated with less respect than other people")
+# b. You have received poorer service than other people at restaurants or stores
+  result<-questionr::freq(temp.dd$d3b1,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "b. You have received poorer service than other people at restaurants or stores")
+# c. People have acted as if they think you are not smart
+  result<-questionr::freq(temp.dd$d3c1,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "c. People have acted as if they think you are not smart")
+# d. People have acted as if they are afraid of you
+  result<-questionr::freq(temp.dd$d3d1,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "d. Rich patients receive better care at hospitals than poor patients.")
+# e. People have acted as if they think you are dishonest
+  result<-questionr::freq(temp.dd$d3e1,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "e. Male patients receive better care at hospitals than female patients.")
+# f. People have acted as if they’re better than you are
+  result<-questionr::freq(temp.dd$d3f1,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "f. People have acted as if they’re better than you are")
+# g. You have been called names or insulted
+  result<-questionr::freq(temp.dd$d3g1,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "g. You have been called names or insulted")
+# h. You have been threatened or harassed
+  result<-questionr::freq(temp.dd$d3h1,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "h. You have been threatened or harassed")
+# i. You have been followed around in stores
+  result<-questionr::freq(temp.dd$d3i1,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "i. You have been followed around in stores")
+rm(temp.dd) 
+```
+
+## Detroit
+```{r D34, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Detroit.60"), ]
+# a. You have been treated with less respect than other people
+  result<-questionr::freq(temp.dd$d3a1,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "a. You have been treated with less respect than other people")
+# b. You have received poorer service than other people at restaurants or stores
+  result<-questionr::freq(temp.dd$d3b1,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "b. You have received poorer service than other people at restaurants or stores")
+# c. People have acted as if they think you are not smart
+  result<-questionr::freq(temp.dd$d3c1,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "c. People have acted as if they think you are not smart")
+# d. People have acted as if they are afraid of you
+  result<-questionr::freq(temp.dd$d3d1,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "d. Rich patients receive better care at hospitals than poor patients.")
+# e. People have acted as if they think you are dishonest
+  result<-questionr::freq(temp.dd$d3e1,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "e. Male patients receive better care at hospitals than female patients.")
+# f. People have acted as if they’re better than you are
+  result<-questionr::freq(temp.dd$d3f1,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "f. People have acted as if they’re better than you are")
+# g. You have been called names or insulted
+  result<-questionr::freq(temp.dd$d3g1,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "g. You have been called names or insulted")
+# h. You have been threatened or harassed
+  result<-questionr::freq(temp.dd$d3h1,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "h. You have been threatened or harassed")
+# i. You have been followed around in stores
+  result<-questionr::freq(temp.dd$d3i1,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "i. You have been followed around in stores")
+rm(temp.dd) 
+```
+
+## Louisiana
+```{r D35, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Louisiana.40"), ]
+# a. You have been treated with less respect than other people
+  result<-questionr::freq(temp.dd$d3a1,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "a. You have been treated with less respect than other people")
+# b. You have received poorer service than other people at restaurants or stores
+  result<-questionr::freq(temp.dd$d3b1,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "b. You have received poorer service than other people at restaurants or stores")
+# c. People have acted as if they think you are not smart
+  result<-questionr::freq(temp.dd$d3c1,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "c. People have acted as if they think you are not smart")
+# d. People have acted as if they are afraid of you
+  result<-questionr::freq(temp.dd$d3d1,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "d. Rich patients receive better care at hospitals than poor patients.")
+# e. People have acted as if they think you are dishonest
+  result<-questionr::freq(temp.dd$d3e1,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "e. Male patients receive better care at hospitals than female patients.")
+# f. People have acted as if they’re better than you are
+  result<-questionr::freq(temp.dd$d3f1,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "f. People have acted as if they’re better than you are")
+# g. You have been called names or insulted
+  result<-questionr::freq(temp.dd$d3g1,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "g. You have been called names or insulted")
+# h. You have been threatened or harassed
+  result<-questionr::freq(temp.dd$d3h1,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "h. You have been threatened or harassed")
+# i. You have been followed around in stores
+  result<-questionr::freq(temp.dd$d3i1,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "i. You have been followed around in stores")
+rm(temp.dd) 
+```
+
+## Georgia
+```{r D36, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Georgia.20"), ]
+# a. You have been treated with less respect than other people
+  result<-questionr::freq(temp.dd$d3a1,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "a. You have been treated with less respect than other people")
+# b. You have received poorer service than other people at restaurants or stores
+  result<-questionr::freq(temp.dd$d3b1,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "b. You have received poorer service than other people at restaurants or stores")
+# c. People have acted as if they think you are not smart
+  result<-questionr::freq(temp.dd$d3c1,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "c. People have acted as if they think you are not smart")
+# d. People have acted as if they are afraid of you
+  result<-questionr::freq(temp.dd$d3d1,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "d. Rich patients receive better care at hospitals than poor patients.")
+# e. People have acted as if they think you are dishonest
+  result<-questionr::freq(temp.dd$d3e1,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "e. Male patients receive better care at hospitals than female patients.")
+# f. People have acted as if they’re better than you are
+  result<-questionr::freq(temp.dd$d3f1,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "f. People have acted as if they’re better than you are")
+# g. You have been called names or insulted
+  result<-questionr::freq(temp.dd$d3g1,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "g. You have been called names or insulted")
+# h. You have been threatened or harassed
+  result<-questionr::freq(temp.dd$d3h1,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "h. You have been threatened or harassed")
+# i. You have been followed around in stores
+  result<-questionr::freq(temp.dd$d3i1,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "i. You have been followed around in stores")
+rm(temp.dd) 
+```
+
+## Michigan
+```{r D37, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Michigan.61"), ]
+# a. You have been treated with less respect than other people
+  result<-questionr::freq(temp.dd$d3a1,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "a. You have been treated with less respect than other people")
+# b. You have received poorer service than other people at restaurants or stores
+  result<-questionr::freq(temp.dd$d3b1,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "b. You have received poorer service than other people at restaurants or stores")
+# c. People have acted as if they think you are not smart
+  result<-questionr::freq(temp.dd$d3c1,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "c. People have acted as if they think you are not smart")
+# d. People have acted as if they are afraid of you
+  result<-questionr::freq(temp.dd$d3d1,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "d. Rich patients receive better care at hospitals than poor patients.")
+# e. People have acted as if they think you are dishonest
+  result<-questionr::freq(temp.dd$d3e1,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "e. Male patients receive better care at hospitals than female patients.")
+# f. People have acted as if they’re better than you are
+  result<-questionr::freq(temp.dd$d3f1,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "f. People have acted as if they’re better than you are")
+# g. You have been called names or insulted
+  result<-questionr::freq(temp.dd$d3g1,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "g. You have been called names or insulted")
+# h. You have been threatened or harassed
+  result<-questionr::freq(temp.dd$d3h1,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "h. You have been threatened or harassed")
+# i. You have been followed around in stores
+  result<-questionr::freq(temp.dd$d3i1,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "i. You have been followed around in stores")
+rm(temp.dd) 
+```
+
+
+
+# D5 {.tabset}
+- D5. The next questions are about the time period of your childhood, before the age of 18. These are standard questions asked in many surveys of life history. This information will allow us to understand how problems that may occur early in life may affect health later in life. This is a sensitive topic and some people may feel uncomfortable with these questions. Please keep in mind that you can skip any question you do not want to answer. All information is kept confidential. When you were growing up, during the first 18 years of your life…
+
+## All data
+```{r D5: Childhood questions}
+# a. Did you live with anyone who was depressed, mentally ill, or suicidal?
+  d5a <- as.factor(d[,"d5a"])
+  levels(d5a) <- list(No="1",
+                     Yes="2",
+                     Dont_know_not_sure="88",
+                     Prefer_not_to_answer="99",
+                     Scantron_Error="*")
+  d5a <- ordered(d5a, c("No","Yes","Dont_know_not_sure","Prefer_not_to_answer","Scantron_Error"))
+  
+  new.d <- data.frame(new.d, d5a)
+  new.d <- apply_labels(new.d, d5a = "live with depressed")
+  temp.d <- data.frame (new.d, d5a)  
+  
+  result<-questionr::freq(temp.d$d5a,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "a. Did you live with anyone who was depressed, mentally ill, or suicidal?")
+# b. Did you live with anyone who was a problem drinker or alcoholic?
+  d5b <- as.factor(d[,"d5b"])
+  levels(d5b) <- list(No="1",
+                     Yes="2",
+                     Dont_know_not_sure="88",
+                     Prefer_not_to_answer="99",
+                     Scantron_Error="*")
+  d5b <- ordered(d5b, c( "No","Yes","Dont_know_not_sure","Prefer_not_to_answer","Scantron_Error"))
+  
+  new.d <- data.frame(new.d, d5b)
+  new.d <- apply_labels(new.d, d5b = "live with alcoholic")
+  temp.d <- data.frame (new.d, d5b)  
+  
+  result<-questionr::freq(temp.d$d5b,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "b. Did you live with anyone who was a problem drinker or alcoholic?")
+# c. Did you live with anyone who used illegal street drugs or who abused prescription medications?  
+  d5c <- as.factor(d[,"d5c"])
+  levels(d5c) <- list(No="1",
+                     Yes="2",
+                     Dont_know_not_sure="88",
+                     Prefer_not_to_answer="99",
+                     Scantron_Error="*")
+  d5c <- ordered(d5c, c( "No","Yes","Dont_know_not_sure","Prefer_not_to_answer","Scantron_Error"))
+  
+  new.d <- data.frame(new.d, d5c)
+  new.d <- apply_labels(new.d, d5c = "live with illegal street drugs")
+  temp.d <- data.frame (new.d, d5c)  
+  
+  result<-questionr::freq(temp.d$d5c,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "c. Did you live with anyone who used illegal street drugs or who abused prescription medications?")
+# d. Did you live with anyone who served time or was sentenced to serve time in a prison, jail, or other correctional facility? 
+  d5d <- as.factor(d[,"d5d"])
+  levels(d5d) <- list(No="1",
+                     Yes="2",
+                     Dont_know_not_sure="88",
+                     Prefer_not_to_answer="99",
+                     Scantron_Error="*")
+  d5d <- ordered(d5d, c( "No","Yes","Dont_know_not_sure","Prefer_not_to_answer","Scantron_Error"))
+  
+  new.d <- data.frame(new.d, d5d)
+  new.d <- apply_labels(new.d, d5d = "live with people in a prison")
+  temp.d <- data.frame (new.d, d5d)  
+  
+  result<-questionr::freq(temp.d$d5d,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "d. Did you live with anyone who served time or was sentenced to serve time in a prison, etc?")
+# e. Were your parents separated or divorced? 
+  d5e <- as.factor(d[,"d5e"])
+  levels(d5e) <- list(No="1",
+                     Yes="2",
+                     Not_married="3",
+                     Dont_know_not_sure="88",
+                     Prefer_not_to_answer="99",
+                     Scantron_Error="*")
+  d5e <- ordered(d5e, c( "No","Yes","Not_married","Dont_know_not_sure","Prefer_not_to_answer","Scantron_Error"))
+  
+  new.d <- data.frame(new.d, d5e)
+  new.d <- apply_labels(new.d, d5e = "parents divorced")
+  temp.d <- data.frame (new.d, d5e)  
+  
+  result<-questionr::freq(temp.d$d5e,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "e. Were your parents separated or divorced?")
+# f. How often did your parents or adults in your home ever slap, hit, kick, punch or beat each other up?
+  d5f <- as.factor(d[,"d5f"])
+  levels(d5f) <- list(Never="1",
+                     Once="2",
+                     More_than_once="3",
+                     Dont_know_not_sure="88",
+                     Prefer_not_to_answer="99",
+                     Scantron_Error="*")
+  d5f <- ordered(d5f, c("Never", "Once","More_than_once","Dont_know_not_sure","Prefer_not_to_answer","Scantron_Error"))
+  
+  new.d <- data.frame(new.d, d5f)
+  new.d <- apply_labels(new.d, d5f = "violence to each other")
+  temp.d <- data.frame (new.d, d5f)  
+  
+  result<-questionr::freq(temp.d$d5f,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "f. How often did your parents or adults in your home ever slap, hit, kick, punch or beat each other up?")  
+#  g. How often did a parent or adult in your home ever hit, beat, kick, or physically hurt you in any way?
+  d5g <- as.factor(d[,"d5g"])
+  levels(d5g) <- list(Never="1",
+                     Once="2",
+                     More_than_once="3",
+                     Dont_know_not_sure="88",
+                     Prefer_not_to_answer="99",
+                     Scantron_Error="*")
+  d5g <- ordered(d5g, c("Never", "Once","More_than_once","Dont_know_not_sure","Prefer_not_to_answer","Scantron_Error"))
+  
+  new.d <- data.frame(new.d, d5g)
+  new.d <- apply_labels(new.d, d5g = "violence to you")
+  temp.d <- data.frame (new.d, d5g)  
+  
+  result<-questionr::freq(temp.d$d5g,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "g. How often did a parent or adult in your home ever hit, beat, kick, or physically hurt you in any way?") 
+# h. How often did a parent or adult in your home ever swear at you, insult you, or put you down?
+  d5h <- as.factor(d[,"d5h"])
+  levels(d5h) <- list(Never="1",
+                     Once="2",
+                     More_than_once="3",
+                     Dont_know_not_sure="88",
+                     Prefer_not_to_answer="99",
+                     Scantron_Error="*")
+  d5h <- ordered(d5h, c("Never", "Once","More_than_once","Dont_know_not_sure","Prefer_not_to_answer","Scantron_Error"))
+  
+  new.d <- data.frame(new.d, d5h)
+  new.d <- apply_labels(new.d, d5h = "swear insult")
+  temp.d <- data.frame (new.d, d5h)  
+  
+  result<-questionr::freq(temp.d$d5h,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "h. How often did a parent or adult in your home ever swear at you, insult you, or put you down?")
+# i. How often did anyone at least 5 years older than you or an adult, ever touch you sexually?
+  d5i <- as.factor(d[,"d5i"])
+  levels(d5i) <- list(Never="1",
+                     Once="2",
+                     More_than_once="3",
+                     Dont_know_not_sure="88",
+                     Prefer_not_to_answer="99",
+                     Scantron_Error="*")
+  d5i <- ordered(d5i, c("Never", "Once","More_than_once","Dont_know_not_sure","Prefer_not_to_answer","Scantron_Error"))
+  
+  new.d <- data.frame(new.d, d5i)
+  new.d <- apply_labels(new.d, d5i = "touch you sexually")
+  temp.d <- data.frame (new.d, d5i)  
+  
+  result<-questionr::freq(temp.d$d5i,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "i. How often did anyone at least 5 years older than you or an adult, ever touch you sexually?")
+# j. How often did anyone at least 5 years older than you or an adult, try to make you touch them sexually?
+  d5j <- as.factor(d[,"d5j"])
+  levels(d5j) <- list(Never="1",
+                     Once="2",
+                     More_than_once="3",
+                     Dont_know_not_sure="88",
+                     Prefer_not_to_answer="99",
+                     Scantron_Error="*")
+  d5j <- ordered(d5j, c("Never","Once","More_than_once","Dont_know_not_sure","Prefer_not_to_answer","Scantron_Error"))
+  
+  new.d <- data.frame(new.d, d5j)
+  new.d <- apply_labels(new.d, d5j = "touch them sexually")
+  temp.d <- data.frame (new.d, d5j)  
+  
+  result<-questionr::freq(temp.d$d5j,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "j. How often did anyone at least 5 years older than you or an adult, try to make you touch them sexually?")
+# k. How often did anyone at least 5 years older than you or an adult, force you to have sex?
+  d5k <- as.factor(d[,"d5k"])
+  levels(d5k) <- list(Never="1",
+                     Once="2",
+                     More_than_once="3",
+                     Dont_know_not_sure="88",
+                     Prefer_not_to_answer="99",
+                     Scantron_Error="*")
+  d5k <- ordered(d5k, c("Never","Once","More_than_once","Dont_know_not_sure","Prefer_not_to_answer","Scantron_Error"))
+  
+  new.d <- data.frame(new.d, d5k)
+  new.d <- apply_labels(new.d, d5k = "forced to have sex")
+  temp.d <- data.frame (new.d, d5k)  
+  
+  result<-questionr::freq(temp.d$d5k,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "k. How often did anyone at least 5 years older than you or an adult, force you to have sex?")
+
+```
+
+## LA County
+```{r d51, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Los Angeles County.80"), ]
+  # a. Did you live with anyone who was depressed, mentally ill, or suicidal?
+  result<-questionr::freq(temp.dd$d5a,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "a. Did you live with anyone who was depressed, mentally ill, or suicidal?")
+# b. Did you live with anyone who was a problem drinker or alcoholic?
+  result<-questionr::freq(temp.dd$d5b,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "b. Did you live with anyone who was a problem drinker or alcoholic?")
+# c. Did you live with anyone who used illegal street drugs or who abused prescription medications?  
+  result<-questionr::freq(temp.dd$d5c,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "c. Did you live with anyone who used illegal street drugs or who abused prescription medications?")
+# d. Did you live with anyone who served time or was sentenced to serve time in a prison, jail, or other correctional facility?  
+  result<-questionr::freq(temp.dd$d5d,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "d. Did you live with anyone who served time or was sentenced to serve time in a prison, jail, or other correctional facility? ")
+# e. Were your parents separated or divorced? 
+  result<-questionr::freq(temp.dd$d5e,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "e. Were your parents separated or divorced? ")
+# f. How often did your parents or adults in your home ever slap, hit, kick, punch or beat each other up?
+  result<-questionr::freq(temp.dd$d5f,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "f. How often did your parents or adults in your home ever slap, hit, kick, punch or beat each other up?")  
+# g. How often did a parent or adult in your home ever hit, beat, kick, or physically hurt you in any way?
+  result<-questionr::freq(temp.dd$d5g,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "g. How often did a parent or adult in your home ever hit, beat, kick, or physically hurt you in any way?") 
+# h. How often did a parent or adult in your home ever swear at you, insult you, or put you down?
+  result<-questionr::freq(temp.dd$d5h,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "h. How often did a parent or adult in your home ever swear at you, insult you, or put you down?")
+# i. How often did anyone at least 5 years older than you or an adult, ever touch you sexually?
+  result<-questionr::freq(temp.dd$d5i,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "i. How often did anyone at least 5 years older than you or an adult, ever touch you sexually?")
+# j. How often did anyone at least 5 years older than you or an adult, try to make you touch them sexually?
+  result<-questionr::freq(temp.dd$d5j,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "j. How often did anyone at least 5 years older than you or an adult, try to make you touch them sexually?")
+# k. How often did anyone at least 5 years older than you or an adult, force you to have sex?
+  result<-questionr::freq(temp.dd$d5k,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "k. How often did anyone at least 5 years older than you or an adult, force you to have sex?")
+rm(temp.dd) 
+```
+
+## Northern CA
+```{r d52, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Northern CA.30"), ]
+ # a. Did you live with anyone who was depressed, mentally ill, or suicidal?
+  result<-questionr::freq(temp.dd$d5a,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "a. Did you live with anyone who was depressed, mentally ill, or suicidal?")
+# b. Did you live with anyone who was a problem drinker or alcoholic?
+  result<-questionr::freq(temp.dd$d5b,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "b. Did you live with anyone who was a problem drinker or alcoholic?")
+# c. Did you live with anyone who used illegal street drugs or who abused prescription medications?  
+  result<-questionr::freq(temp.dd$d5c,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "c. Did you live with anyone who used illegal street drugs or who abused prescription medications?")
+# d. Did you live with anyone who served time or was sentenced to serve time in a prison, jail, or other correctional facility?  
+  result<-questionr::freq(temp.dd$d5d,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "d. Did you live with anyone who served time or was sentenced to serve time in a prison, jail, or other correctional facility? ")
+# e. Were your parents separated or divorced? 
+  result<-questionr::freq(temp.dd$d5e,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "e. Were your parents separated or divorced? ")
+# f. How often did your parents or adults in your home ever slap, hit, kick, punch or beat each other up?
+  result<-questionr::freq(temp.dd$d5f,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "f. How often did your parents or adults in your home ever slap, hit, kick, punch or beat each other up?")  
+# g. How often did a parent or adult in your home ever hit, beat, kick, or physically hurt you in any way?
+  result<-questionr::freq(temp.dd$d5g,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "g. How often did a parent or adult in your home ever hit, beat, kick, or physically hurt you in any way?") 
+# h. How often did a parent or adult in your home ever swear at you, insult you, or put you down?
+  result<-questionr::freq(temp.dd$d5h,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "h. How often did a parent or adult in your home ever swear at you, insult you, or put you down?")
+# i. How often did anyone at least 5 years older than you or an adult, ever touch you sexually?
+  result<-questionr::freq(temp.dd$d5i,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "i. How often did anyone at least 5 years older than you or an adult, ever touch you sexually?")
+# j. How often did anyone at least 5 years older than you or an adult, try to make you touch them sexually?
+  result<-questionr::freq(temp.dd$d5j,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "j. How often did anyone at least 5 years older than you or an adult, try to make you touch them sexually?")
+# k. How often did anyone at least 5 years older than you or an adult, force you to have sex?
+  result<-questionr::freq(temp.dd$d5k,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "k. How often did anyone at least 5 years older than you or an adult, force you to have sex?")
+rm(temp.dd) 
+```
+
+## Greater CA
+```{r d53, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Greater CA.10"), ]
+  # a. Did you live with anyone who was depressed, mentally ill, or suicidal?
+  result<-questionr::freq(temp.dd$d5a,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "a. Did you live with anyone who was depressed, mentally ill, or suicidal?")
+# b. Did you live with anyone who was a problem drinker or alcoholic?
+  result<-questionr::freq(temp.dd$d5b,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "b. Did you live with anyone who was a problem drinker or alcoholic?")
+# c. Did you live with anyone who used illegal street drugs or who abused prescription medications?  
+  result<-questionr::freq(temp.dd$d5c,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "c. Did you live with anyone who used illegal street drugs or who abused prescription medications?")
+# d. Did you live with anyone who served time or was sentenced to serve time in a prison, jail, or other correctional facility?  
+  result<-questionr::freq(temp.dd$d5d,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "d. Did you live with anyone who served time or was sentenced to serve time in a prison, jail, or other correctional facility? ")
+# e. Were your parents separated or divorced? 
+  result<-questionr::freq(temp.dd$d5e,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "e. Were your parents separated or divorced? ")
+# f. How often did your parents or adults in your home ever slap, hit, kick, punch or beat each other up?
+  result<-questionr::freq(temp.dd$d5f,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "f. How often did your parents or adults in your home ever slap, hit, kick, punch or beat each other up?")  
+# g. How often did a parent or adult in your home ever hit, beat, kick, or physically hurt you in any way?
+  result<-questionr::freq(temp.dd$d5g,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "g. How often did a parent or adult in your home ever hit, beat, kick, or physically hurt you in any way?") 
+# h. How often did a parent or adult in your home ever swear at you, insult you, or put you down?
+  result<-questionr::freq(temp.dd$d5h,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "h. How often did a parent or adult in your home ever swear at you, insult you, or put you down?")
+# i. How often did anyone at least 5 years older than you or an adult, ever touch you sexually?
+  result<-questionr::freq(temp.dd$d5i,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "i. How often did anyone at least 5 years older than you or an adult, ever touch you sexually?")
+# j. How often did anyone at least 5 years older than you or an adult, try to make you touch them sexually?
+  result<-questionr::freq(temp.dd$d5j,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "j. How often did anyone at least 5 years older than you or an adult, try to make you touch them sexually?")
+# k. How often did anyone at least 5 years older than you or an adult, force you to have sex?
+  result<-questionr::freq(temp.dd$d5k,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "k. How often did anyone at least 5 years older than you or an adult, force you to have sex?")
+rm(temp.dd) 
+```
+
+## Detroit
+```{r d54, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Detroit.60"), ]
+  # a. Did you live with anyone who was depressed, mentally ill, or suicidal?
+  result<-questionr::freq(temp.dd$d5a,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "a. Did you live with anyone who was depressed, mentally ill, or suicidal?")
+# b. Did you live with anyone who was a problem drinker or alcoholic?
+  result<-questionr::freq(temp.dd$d5b,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "b. Did you live with anyone who was a problem drinker or alcoholic?")
+# c. Did you live with anyone who used illegal street drugs or who abused prescription medications?  
+  result<-questionr::freq(temp.dd$d5c,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "c. Did you live with anyone who used illegal street drugs or who abused prescription medications?")
+# d. Did you live with anyone who served time or was sentenced to serve time in a prison, jail, or other correctional facility?  
+  result<-questionr::freq(temp.dd$d5d,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "d. Did you live with anyone who served time or was sentenced to serve time in a prison, jail, or other correctional facility? ")
+# e. Were your parents separated or divorced? 
+  result<-questionr::freq(temp.dd$d5e,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "e. Were your parents separated or divorced? ")
+# f. How often did your parents or adults in your home ever slap, hit, kick, punch or beat each other up?
+  result<-questionr::freq(temp.dd$d5f,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "f. How often did your parents or adults in your home ever slap, hit, kick, punch or beat each other up?")  
+# g. How often did a parent or adult in your home ever hit, beat, kick, or physically hurt you in any way?
+  result<-questionr::freq(temp.dd$d5g,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "g. How often did a parent or adult in your home ever hit, beat, kick, or physically hurt you in any way?") 
+# h. How often did a parent or adult in your home ever swear at you, insult you, or put you down?
+  result<-questionr::freq(temp.dd$d5h,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "h. How often did a parent or adult in your home ever swear at you, insult you, or put you down?")
+# i. How often did anyone at least 5 years older than you or an adult, ever touch you sexually?
+  result<-questionr::freq(temp.dd$d5i,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "i. How often did anyone at least 5 years older than you or an adult, ever touch you sexually?")
+# j. How often did anyone at least 5 years older than you or an adult, try to make you touch them sexually?
+  result<-questionr::freq(temp.dd$d5j,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "j. How often did anyone at least 5 years older than you or an adult, try to make you touch them sexually?")
+# k. How often did anyone at least 5 years older than you or an adult, force you to have sex?
+  result<-questionr::freq(temp.dd$d5k,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "k. How often did anyone at least 5 years older than you or an adult, force you to have sex?")
+rm(temp.dd) 
+```
+
+## Louisiana
+```{r d55, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Louisiana.40"), ]
+ # a. Did you live with anyone who was depressed, mentally ill, or suicidal?
+  result<-questionr::freq(temp.dd$d5a,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "a. Did you live with anyone who was depressed, mentally ill, or suicidal?")
+# b. Did you live with anyone who was a problem drinker or alcoholic?
+  result<-questionr::freq(temp.dd$d5b,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "b. Did you live with anyone who was a problem drinker or alcoholic?")
+# c. Did you live with anyone who used illegal street drugs or who abused prescription medications?  
+  result<-questionr::freq(temp.dd$d5c,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "c. Did you live with anyone who used illegal street drugs or who abused prescription medications?")
+# d. Did you live with anyone who served time or was sentenced to serve time in a prison, jail, or other correctional facility?  
+  result<-questionr::freq(temp.dd$d5d,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "d. Did you live with anyone who served time or was sentenced to serve time in a prison, jail, or other correctional facility? ")
+# e. Were your parents separated or divorced? 
+  result<-questionr::freq(temp.dd$d5e,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "e. Were your parents separated or divorced? ")
+# f. How often did your parents or adults in your home ever slap, hit, kick, punch or beat each other up?
+  result<-questionr::freq(temp.dd$d5f,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "f. How often did your parents or adults in your home ever slap, hit, kick, punch or beat each other up?")  
+# g. How often did a parent or adult in your home ever hit, beat, kick, or physically hurt you in any way?
+  result<-questionr::freq(temp.dd$d5g,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "g. How often did a parent or adult in your home ever hit, beat, kick, or physically hurt you in any way?") 
+# h. How often did a parent or adult in your home ever swear at you, insult you, or put you down?
+  result<-questionr::freq(temp.dd$d5h,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "h. How often did a parent or adult in your home ever swear at you, insult you, or put you down?")
+# i. How often did anyone at least 5 years older than you or an adult, ever touch you sexually?
+  result<-questionr::freq(temp.dd$d5i,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "i. How often did anyone at least 5 years older than you or an adult, ever touch you sexually?")
+# j. How often did anyone at least 5 years older than you or an adult, try to make you touch them sexually?
+  result<-questionr::freq(temp.dd$d5j,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "j. How often did anyone at least 5 years older than you or an adult, try to make you touch them sexually?")
+# k. How often did anyone at least 5 years older than you or an adult, force you to have sex?
+  result<-questionr::freq(temp.dd$d5k,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "k. How often did anyone at least 5 years older than you or an adult, force you to have sex?")
+rm(temp.dd) 
+```
+
+## Georgia
+```{r d56, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Georgia.20"), ]
+  # a. Did you live with anyone who was depressed, mentally ill, or suicidal?
+  result<-questionr::freq(temp.dd$d5a,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "a. Did you live with anyone who was depressed, mentally ill, or suicidal?")
+# b. Did you live with anyone who was a problem drinker or alcoholic?
+  result<-questionr::freq(temp.dd$d5b,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "b. Did you live with anyone who was a problem drinker or alcoholic?")
+# c. Did you live with anyone who used illegal street drugs or who abused prescription medications?  
+  result<-questionr::freq(temp.dd$d5c,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "c. Did you live with anyone who used illegal street drugs or who abused prescription medications?")
+# d. Did you live with anyone who served time or was sentenced to serve time in a prison, jail, or other correctional facility?  
+  result<-questionr::freq(temp.dd$d5d,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "d. Did you live with anyone who served time or was sentenced to serve time in a prison, jail, or other correctional facility? ")
+# e. Were your parents separated or divorced? 
+  result<-questionr::freq(temp.dd$d5e,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "e. Were your parents separated or divorced? ")
+# f. How often did your parents or adults in your home ever slap, hit, kick, punch or beat each other up?
+  result<-questionr::freq(temp.dd$d5f,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "f. How often did your parents or adults in your home ever slap, hit, kick, punch or beat each other up?")  
+# g. How often did a parent or adult in your home ever hit, beat, kick, or physically hurt you in any way?
+  result<-questionr::freq(temp.dd$d5g,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "g. How often did a parent or adult in your home ever hit, beat, kick, or physically hurt you in any way?") 
+# h. How often did a parent or adult in your home ever swear at you, insult you, or put you down?
+  result<-questionr::freq(temp.dd$d5h,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "h. How often did a parent or adult in your home ever swear at you, insult you, or put you down?")
+# i. How often did anyone at least 5 years older than you or an adult, ever touch you sexually?
+  result<-questionr::freq(temp.dd$d5i,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "i. How often did anyone at least 5 years older than you or an adult, ever touch you sexually?")
+# j. How often did anyone at least 5 years older than you or an adult, try to make you touch them sexually?
+  result<-questionr::freq(temp.dd$d5j,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "j. How often did anyone at least 5 years older than you or an adult, try to make you touch them sexually?")
+# k. How often did anyone at least 5 years older than you or an adult, force you to have sex?
+  result<-questionr::freq(temp.dd$d5k,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "k. How often did anyone at least 5 years older than you or an adult, force you to have sex?")
+rm(temp.dd) 
+```
+
+## Michigan
+```{r d57, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Michigan.61"), ]
+  # a. Did you live with anyone who was depressed, mentally ill, or suicidal?
+  result<-questionr::freq(temp.dd$d5a,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "a. Did you live with anyone who was depressed, mentally ill, or suicidal?")
+# b. Did you live with anyone who was a problem drinker or alcoholic?
+  result<-questionr::freq(temp.dd$d5b,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "b. Did you live with anyone who was a problem drinker or alcoholic?")
+# c. Did you live with anyone who used illegal street drugs or who abused prescription medications?  
+  result<-questionr::freq(temp.dd$d5c,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "c. Did you live with anyone who used illegal street drugs or who abused prescription medications?")
+# d. Did you live with anyone who served time or was sentenced to serve time in a prison, jail, or other correctional facility?  
+  result<-questionr::freq(temp.dd$d5d,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "d. Did you live with anyone who served time or was sentenced to serve time in a prison, jail, or other correctional facility? ")
+# e. Were your parents separated or divorced? 
+  result<-questionr::freq(temp.dd$d5e,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "e. Were your parents separated or divorced? ")
+# f. How often did your parents or adults in your home ever slap, hit, kick, punch or beat each other up?
+  result<-questionr::freq(temp.dd$d5f,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "f. How often did your parents or adults in your home ever slap, hit, kick, punch or beat each other up?")  
+# g. How often did a parent or adult in your home ever hit, beat, kick, or physically hurt you in any way?
+  result<-questionr::freq(temp.dd$d5g,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "g. How often did a parent or adult in your home ever hit, beat, kick, or physically hurt you in any way?") 
+# h. How often did a parent or adult in your home ever swear at you, insult you, or put you down?
+  result<-questionr::freq(temp.dd$d5h,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "h. How often did a parent or adult in your home ever swear at you, insult you, or put you down?")
+# i. How often did anyone at least 5 years older than you or an adult, ever touch you sexually?
+  result<-questionr::freq(temp.dd$d5i,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "i. How often did anyone at least 5 years older than you or an adult, ever touch you sexually?")
+# j. How often did anyone at least 5 years older than you or an adult, try to make you touch them sexually?
+  result<-questionr::freq(temp.dd$d5j,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "j. How often did anyone at least 5 years older than you or an adult, try to make you touch them sexually?")
+# k. How often did anyone at least 5 years older than you or an adult, force you to have sex?
+  result<-questionr::freq(temp.dd$d5k,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "k. How often did anyone at least 5 years older than you or an adult, force you to have sex?")
+rm(temp.dd) 
+```
+
+
+# E10 {.tabset}
+- E10. Please mark all the treatments that you have received for your prostate cancer? Mark all that apply.
+
+## All data
+```{r E10: treatments}
+# 1.No treatment
+  e10_1 <- as.factor(d[,"e10_1"])
+  levels(e10_1) <- list(Yes="1",Scantron_Error="*")
+  e10_1 <- ordered(e10_1, c("Yes","Scantron_Error"))
+  
+  new.d <- data.frame(new.d, e10_1)
+  new.d <- apply_labels(new.d, e10_1 = "No treatment")
+  temp.d <- data.frame (new.d, e10_1)  
+  
+  result<-questionr::freq(temp.d$e10_1,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "1. No treatment")
+# 2. Active surveillance
+  e10_2 <- as.factor(d[,"e10_2"])
+  levels(e10_2) <- list(Yes="1",Scantron_Error="*")
+  e10_2 <- ordered(e10_2, c("Yes","Scantron_Error"))
+  
+  new.d <- data.frame(new.d, e10_2)
+  new.d <- apply_labels(new.d, e10_2 = "Active surveillance")
+  temp.d <- data.frame (new.d, e10_2)  
+  
+  result<-questionr::freq(temp.d$e10_2,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "2. Active surveillance")
+# 3. Prostatectomy
+  e10_3 <- as.factor(d[,"e10_3"])
+  levels(e10_3) <- list(Yes="1",Scantron_Error="*")
+  e10_3 <- ordered(e10_3, c("Yes","Scantron_Error"))
+  
+  new.d <- data.frame(new.d, e10_3)
+  new.d <- apply_labels(new.d, e10_3 = "Prostatectomy")
+  temp.d <- data.frame (new.d, e10_3)  
+  
+  result<-questionr::freq(temp.d$e10_3,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "3. Prostatectomy")
+# 4. Radiation 
+  e10_4 <- as.factor(d[,"e10_4"])
+  levels(e10_4) <- list(Yes="1",Scantron_Error="*")
+  e10_4 <- ordered(e10_4, c("Yes","Scantron_Error"))
+  
+  new.d <- data.frame(new.d, e10_4)
+  new.d <- apply_labels(new.d, e10_4 = "Radiation")
+  temp.d <- data.frame (new.d, e10_4)  
+  
+  result<-questionr::freq(temp.d$e10_4,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "4. Radiation")
+# 5. Hormonal treatments
+  e10_5 <- as.factor(d[,"e10_5"])
+  levels(e10_5) <- list(Yes="1",Scantron_Error="*")
+  e10_5 <- ordered(e10_5, c("Yes","Scantron_Error"))
+  
+  new.d <- data.frame(new.d, e10_5)
+  new.d <- apply_labels(new.d, e10_5 = "Hormonal treatments")
+  temp.d <- data.frame (new.d, e10_5)  
+  
+  result<-questionr::freq(temp.d$e10_5,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "5. Hormonal treatments")
+# 6. Provenge/immunotherapy
+  e10_6 <- as.factor(d[,"e10_6"])
+  levels(e10_6) <- list(Yes="1",Scantron_Error="*")
+  e10_6 <- ordered(e10_6, c("Yes","Scantron_Error"))
+  
+  new.d <- data.frame(new.d, e10_6)
+  new.d <- apply_labels(new.d, e10_6 = "Provenge/immunotherapy")
+  temp.d <- data.frame (new.d, e10_6)  
+  
+  result<-questionr::freq(temp.d$e10_6,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "6. Provenge/immunotherapy")  
+#  7. Chemotherapy
+  e10_7 <- as.factor(d[,"e10_7"])
+  levels(e10_7) <- list(Yes="1",Scantron_Error="*")
+  e10_7 <- ordered(e10_7, c("Yes","Scantron_Error"))
+  
+  new.d <- data.frame(new.d, e10_7)
+  new.d <- apply_labels(new.d, e10_7 = "Chemotherapy")
+  temp.d <- data.frame (new.d, e10_7)  
+  
+  result<-questionr::freq(temp.d$e10_7,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "7. Chemotherapy") 
+# 8. Other
+  e10_8 <- as.factor(d[,"e10_8"])
+  levels(e10_8) <- list(Yes="1",Scantron_Error="*")
+  e10_8 <- ordered(e10_8, c("Yes","Scantron_Error"))
+  
+  new.d <- data.frame(new.d, e10_8)
+  new.d <- apply_labels(new.d, e10_8 = "Other")
+  temp.d <- data.frame (new.d, e10_8)  
+  
+  result<-questionr::freq(temp.d$e10_8,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "8. Other")
+
+```
+
+## LA County
+```{r e101, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Los Angeles County.80"), ]
+  # 1. No treatment
+  result<-questionr::freq(temp.dd$e10_1,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "1. No treatment")
+# 2. Active surveillance
+  result<-questionr::freq(temp.dd$e10_2,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "2. Active surveillance")
+# 3. Prostatectomy
+  result<-questionr::freq(temp.dd$e10_3,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "3. Prostatectomy")
+# 4. Radiation  
+  result<-questionr::freq(temp.dd$e10_4,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "4. Radiation")
+# 5. Hormonal treatments
+  result<-questionr::freq(temp.dd$e10_5,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "5. Hormonal treatments")
+# 6. Provenge/immunotherapy
+  result<-questionr::freq(temp.dd$e10_6,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "6. Provenge/immunotherapy")  
+# 7. Chemotherapy
+  result<-questionr::freq(temp.dd$e10_7,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "7. Chemotherapy") 
+# 8. Other
+  result<-questionr::freq(temp.dd$e10_8,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "8. Other")
+rm(temp.dd) 
+```
+
+## Northern CA
+```{r e102, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Northern CA.30"), ]
+    # 1. No treatment
+  result<-questionr::freq(temp.dd$e10_1,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "1. No treatment")
+# 2. Active surveillance
+  result<-questionr::freq(temp.dd$e10_2,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "2. Active surveillance")
+# 3. Prostatectomy
+  result<-questionr::freq(temp.dd$e10_3,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "3. Prostatectomy")
+# 4. Radiation  
+  result<-questionr::freq(temp.dd$e10_4,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "4. Radiation")
+# 5. Hormonal treatments
+  result<-questionr::freq(temp.dd$e10_5,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "5. Hormonal treatments")
+# 6. Provenge/immunotherapy
+  result<-questionr::freq(temp.dd$e10_6,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "6. Provenge/immunotherapy")  
+# 7. Chemotherapy
+  result<-questionr::freq(temp.dd$e10_7,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "7. Chemotherapy") 
+# 8. Other
+  result<-questionr::freq(temp.dd$e10_8,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "8. Other")
+rm(temp.dd) 
+```
+
+## Greater CA
+```{r e103, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Greater CA.10"), ]
+    # 1. No treatment
+  result<-questionr::freq(temp.dd$e10_1,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "1. No treatment")
+# 2. Active surveillance
+  result<-questionr::freq(temp.dd$e10_2,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "2. Active surveillance")
+# 3. Prostatectomy
+  result<-questionr::freq(temp.dd$e10_3,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "3. Prostatectomy")
+# 4. Radiation  
+  result<-questionr::freq(temp.dd$e10_4,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "4. Radiation")
+# 5. Hormonal treatments
+  result<-questionr::freq(temp.dd$e10_5,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "5. Hormonal treatments")
+# 6. Provenge/immunotherapy
+  result<-questionr::freq(temp.dd$e10_6,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "6. Provenge/immunotherapy")  
+# 7. Chemotherapy
+  result<-questionr::freq(temp.dd$e10_7,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "7. Chemotherapy") 
+# 8. Other
+  result<-questionr::freq(temp.dd$e10_8,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "8. Other")
+rm(temp.dd) 
+```
+
+## Detroit
+```{r e104, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Detroit.60"), ]
+    # 1. No treatment
+  result<-questionr::freq(temp.dd$e10_1,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "1. No treatment")
+# 2. Active surveillance
+  result<-questionr::freq(temp.dd$e10_2,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "2. Active surveillance")
+# 3. Prostatectomy
+  result<-questionr::freq(temp.dd$e10_3,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "3. Prostatectomy")
+# 4. Radiation  
+  result<-questionr::freq(temp.dd$e10_4,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "4. Radiation")
+# 5. Hormonal treatments
+  result<-questionr::freq(temp.dd$e10_5,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "5. Hormonal treatments")
+# 6. Provenge/immunotherapy
+  result<-questionr::freq(temp.dd$e10_6,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "6. Provenge/immunotherapy")  
+# 7. Chemotherapy
+  result<-questionr::freq(temp.dd$e10_7,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "7. Chemotherapy") 
+# 8. Other
+  result<-questionr::freq(temp.dd$e10_8,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "8. Other")
+rm(temp.dd) 
+```
+
+## Louisiana
+```{r e105, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Louisiana.40"), ]
+    # 1. No treatment
+  result<-questionr::freq(temp.dd$e10_1,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "1. No treatment")
+# 2. Active surveillance
+  result<-questionr::freq(temp.dd$e10_2,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "2. Active surveillance")
+# 3. Prostatectomy
+  result<-questionr::freq(temp.dd$e10_3,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "3. Prostatectomy")
+# 4. Radiation  
+  result<-questionr::freq(temp.dd$e10_4,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "4. Radiation")
+# 5. Hormonal treatments
+  result<-questionr::freq(temp.dd$e10_5,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "5. Hormonal treatments")
+# 6. Provenge/immunotherapy
+  result<-questionr::freq(temp.dd$e10_6,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "6. Provenge/immunotherapy")  
+# 7. Chemotherapy
+  result<-questionr::freq(temp.dd$e10_7,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "7. Chemotherapy") 
+# 8. Other
+  result<-questionr::freq(temp.dd$e10_8,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "8. Other")
+rm(temp.dd) 
+```
+
+## Georgia
+```{r e106, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Georgia.20"), ]
+    # 1. No treatment
+  result<-questionr::freq(temp.dd$e10_1,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "1. No treatment")
+# 2. Active surveillance
+  result<-questionr::freq(temp.dd$e10_2,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "2. Active surveillance")
+# 3. Prostatectomy
+  result<-questionr::freq(temp.dd$e10_3,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "3. Prostatectomy")
+# 4. Radiation  
+  result<-questionr::freq(temp.dd$e10_4,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "4. Radiation")
+# 5. Hormonal treatments
+  result<-questionr::freq(temp.dd$e10_5,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "5. Hormonal treatments")
+# 6. Provenge/immunotherapy
+  result<-questionr::freq(temp.dd$e10_6,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "6. Provenge/immunotherapy")  
+# 7. Chemotherapy
+  result<-questionr::freq(temp.dd$e10_7,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "7. Chemotherapy") 
+# 8. Other
+  result<-questionr::freq(temp.dd$e10_8,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "8. Other")
+rm(temp.dd) 
+```
+
+## Michigan
+```{r e107, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Michigan.61"), ]
+    # 1. No treatment
+  result<-questionr::freq(temp.dd$e10_1,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "1. No treatment")
+# 2. Active surveillance
+  result<-questionr::freq(temp.dd$e10_2,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "2. Active surveillance")
+# 3. Prostatectomy
+  result<-questionr::freq(temp.dd$e10_3,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "3. Prostatectomy")
+# 4. Radiation  
+  result<-questionr::freq(temp.dd$e10_4,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "4. Radiation")
+# 5. Hormonal treatments
+  result<-questionr::freq(temp.dd$e10_5,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "5. Hormonal treatments")
+# 6. Provenge/immunotherapy
+  result<-questionr::freq(temp.dd$e10_6,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "6. Provenge/immunotherapy")  
+# 7. Chemotherapy
+  result<-questionr::freq(temp.dd$e10_7,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "7. Chemotherapy") 
+# 8. Other
+  result<-questionr::freq(temp.dd$e10_8,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "8. Other")
+rm(temp.dd) 
+```
+
+# E11 {.tabset}
+- E11. Your treatment decision: How true is each of the following statements for you?
+
+## All data
+```{r E11}
+#a. I had all the information I needed when  a  treatment  was  chosen  for my prostate cancer
+  e11a <- as.factor(d[,"e11a"])
+  levels(e11a) <- list(Not_at_all="1",
+                     A_little_bit="2",
+                     Somewhat="3",
+                     Quite_a_bit="4",
+                     Very_much="5",
+                     Scantron_Error="*")
+  e11a <- ordered(e11a, c("Not_at_all","A_little_bit","Somewhat","Quite_a_bit","Very_much","Scantron_Error"))
+  
+  new.d <- data.frame(new.d, e11a)
+  new.d <- apply_labels(new.d, e11a = "all necessary information of tx")
+  temp.d <- data.frame (new.d, e11a)  
+  
+  result<-questionr::freq(temp.d$e11a,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "a. I had all the information I needed when a treatment was chosen for my prostate cancer")
+#b. My doctors told me the whole story about the effects of treatment
+  e11b <- as.factor(d[,"e11b"])
+  levels(e11b) <- list(Not_at_all="1",
+                     A_little_bit="2",
+                     Somewhat="3",
+                     Quite_a_bit="4",
+                     Very_much="5",
+                     Scantron_Error="*")
+  e11b <- ordered(e11b, c("Not_at_all","A_little_bit","Somewhat","Quite_a_bit","Very_much","Scantron_Error"))
+  
+  new.d <- data.frame(new.d, e11b)
+  new.d <- apply_labels(new.d, e11b = "the effects of tx")
+  temp.d <- data.frame (new.d, e11b)  
+  
+  result<-questionr::freq(temp.d$e11b,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "b. My doctors told me the whole story about the effects of treatment")
+#c. I knew the right questions to ask my doctor
+  e11c <- as.factor(d[,"e11c"])
+  levels(e11c) <- list(Not_at_all="1",
+                     A_little_bit="2",
+                     Somewhat="3",
+                     Quite_a_bit="4",
+                     Very_much="5",
+                     Scantron_Error="*")
+  e11c <- ordered(e11c, c("Not_at_all","A_little_bit","Somewhat","Quite_a_bit","Very_much","Scantron_Error"))
+  
+  new.d <- data.frame(new.d, e11c)
+  new.d <- apply_labels(new.d, e11c = "right questions to ask")
+  temp.d <- data.frame (new.d, e11c)  
+  
+  result<-questionr::freq(temp.d$e11c,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "c. I knew the right questions to ask my doctor")
+#d. I had enough time to make a decision about my treatment
+  e11d <- as.factor(d[,"e11d"])
+  levels(e11d) <- list(Not_at_all="1",
+                     A_little_bit="2",
+                     Somewhat="3",
+                     Quite_a_bit="4",
+                     Very_much="5",
+                     Scantron_Error="*")
+  e11d <- ordered(e11d, c("Not_at_all","A_little_bit","Somewhat","Quite_a_bit","Very_much","Scantron_Error"))
+  
+  new.d <- data.frame(new.d, e11d)
+  new.d <- apply_labels(new.d, e11d = "enough time to decide")
+  temp.d <- data.frame (new.d, e11d)  
+  
+  result<-questionr::freq(temp.d$e11d,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "d. I had enough time to make a decision about my treatment")
+#e. I am satisfied with the choices I made in treating my prostate cancer
+  e11e <- as.factor(d[,"e11e"])
+  levels(e11e) <- list(Not_at_all="1",
+                     A_little_bit="2",
+                     Somewhat="3",
+                     Quite_a_bit="4",
+                     Very_much="5",
+                     Scantron_Error="*")
+  e11e <- ordered(e11e, c("Not_at_all","A_little_bit","Somewhat","Quite_a_bit","Very_much","Scantron_Error"))
+  
+  new.d <- data.frame(new.d, e11e)
+  new.d <- apply_labels(new.d, e11e = "satisfied with the choices")
+  temp.d <- data.frame (new.d, e11e)  
+  
+  result<-questionr::freq(temp.d$e11e,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "e. I am satisfied with the choices I made in treating my prostate cancer")
+#f. I would recommend the treatment I had to a close relative or friend
+  e11f <- as.factor(d[,"e11f"])
+  levels(e11f) <- list(Not_at_all="1",
+                     A_little_bit="2",
+                     Somewhat="3",
+                     Quite_a_bit="4",
+                     Very_much="5",
+                     Scantron_Error="*")
+  e11f <- ordered(e11f, c("Not_at_all","A_little_bit","Somewhat","Quite_a_bit","Very_much","Scantron_Error"))
+  
+  new.d <- data.frame(new.d, e11f)
+  new.d <- apply_labels(new.d, e11f = "recommend the tx")
+  temp.d <- data.frame (new.d, e11f)  
+  
+  result<-questionr::freq(temp.d$e11f,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "f. I would recommend the treatment I had to a close relative or friend")
+```
+
+## LA County
+```{r e111, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Los Angeles County.80"), ]
+#a. I had all the information I needed when  a  treatment  was  chosen  for my prostate cancer
+  result<-questionr::freq(temp.dd$e11a,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "a. I had all the information I needed when  a  treatment  was  chosen  for my prostate cancer")
+#b. My doctors told me the whole story about the effects of treatment
+  result<-questionr::freq(temp.dd$e11b,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "b. My doctors told me the whole story about the effects of treatment")
+#c. I knew the right questions to ask my doctor
+  result<-questionr::freq(temp.dd$e11c,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "c. I knew the right questions to ask my doctor")
+#d. I had enough time to make a decision about my treatment 
+  result<-questionr::freq(temp.dd$e11d,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "d. I had enough time to make a decision about my treatment ")
+#e. I am satisfied with the choices I made in treating my prostate cancer
+  result<-questionr::freq(temp.dd$e11e,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "e. I am satisfied with the choices I made in treating my prostate cancer")
+#f. I would recommend the treatment I had to a close relative or friend
+  result<-questionr::freq(temp.dd$e11f,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "f. I would recommend the treatment I had to a close relative or friend")  
+rm(temp.dd) 
+```
+
+## Northern CA
+```{r e112, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Northern CA.30"), ]
+#a. I had all the information I needed when  a  treatment  was  chosen  for my prostate cancer
+  result<-questionr::freq(temp.dd$e11a,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "a. I had all the information I needed when  a  treatment  was  chosen  for my prostate cancer")
+#b. My doctors told me the whole story about the effects of treatment
+  result<-questionr::freq(temp.dd$e11b,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "b. My doctors told me the whole story about the effects of treatment")
+#c. I knew the right questions to ask my doctor
+  result<-questionr::freq(temp.dd$e11c,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "c. I knew the right questions to ask my doctor")
+#d. I had enough time to make a decision about my treatment 
+  result<-questionr::freq(temp.dd$e11d,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "d. I had enough time to make a decision about my treatment ")
+#e. I am satisfied with the choices I made in treating my prostate cancer
+  result<-questionr::freq(temp.dd$e11e,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "e. I am satisfied with the choices I made in treating my prostate cancer")
+#f. I would recommend the treatment I had to a close relative or friend
+  result<-questionr::freq(temp.dd$e11f,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "f. I would recommend the treatment I had to a close relative or friend")
+rm(temp.dd) 
+```
+
+## Greater CA
+```{r e113, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Greater CA.10"), ]
+#a. I had all the information I needed when  a  treatment  was  chosen  for my prostate cancer
+  result<-questionr::freq(temp.dd$e11a,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "a. I had all the information I needed when  a  treatment  was  chosen  for my prostate cancer")
+#b. My doctors told me the whole story about the effects of treatment
+  result<-questionr::freq(temp.dd$e11b,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "b. My doctors told me the whole story about the effects of treatment")
+#c. I knew the right questions to ask my doctor
+  result<-questionr::freq(temp.dd$e11c,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "c. I knew the right questions to ask my doctor")
+#d. I had enough time to make a decision about my treatment 
+  result<-questionr::freq(temp.dd$e11d,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "d. I had enough time to make a decision about my treatment ")
+#e. I am satisfied with the choices I made in treating my prostate cancer
+  result<-questionr::freq(temp.dd$e11e,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "e. I am satisfied with the choices I made in treating my prostate cancer")
+#f. I would recommend the treatment I had to a close relative or friend
+  result<-questionr::freq(temp.dd$e11f,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "f. I would recommend the treatment I had to a close relative or friend")
+rm(temp.dd) 
+```
+
+## Detroit
+```{r e114, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Detroit.60"), ]
+#a. I had all the information I needed when  a  treatment  was  chosen  for my prostate cancer
+  result<-questionr::freq(temp.dd$e11a,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "a. I had all the information I needed when  a  treatment  was  chosen  for my prostate cancer")
+#b. My doctors told me the whole story about the effects of treatment
+  result<-questionr::freq(temp.dd$e11b,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "b. My doctors told me the whole story about the effects of treatment")
+#c. I knew the right questions to ask my doctor
+  result<-questionr::freq(temp.dd$e11c,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "c. I knew the right questions to ask my doctor")
+#d. I had enough time to make a decision about my treatment 
+  result<-questionr::freq(temp.dd$e11d,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "d. I had enough time to make a decision about my treatment ")
+#e. I am satisfied with the choices I made in treating my prostate cancer
+  result<-questionr::freq(temp.dd$e11e,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "e. I am satisfied with the choices I made in treating my prostate cancer")
+#f. I would recommend the treatment I had to a close relative or friend
+  result<-questionr::freq(temp.dd$e11f,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "f. I would recommend the treatment I had to a close relative or friend")
+rm(temp.dd) 
+```
+
+## Louisiana
+```{r e115, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Louisiana.40"), ]
+#a. I had all the information I needed when  a  treatment  was  chosen  for my prostate cancer
+  result<-questionr::freq(temp.dd$e11a,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "a. I had all the information I needed when  a  treatment  was  chosen  for my prostate cancer")
+#b. My doctors told me the whole story about the effects of treatment
+  result<-questionr::freq(temp.dd$e11b,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "b. My doctors told me the whole story about the effects of treatment")
+#c. I knew the right questions to ask my doctor
+  result<-questionr::freq(temp.dd$e11c,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "c. I knew the right questions to ask my doctor")
+#d. I had enough time to make a decision about my treatment 
+  result<-questionr::freq(temp.dd$e11d,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "d. I had enough time to make a decision about my treatment ")
+#e. I am satisfied with the choices I made in treating my prostate cancer
+  result<-questionr::freq(temp.dd$e11e,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "e. I am satisfied with the choices I made in treating my prostate cancer")
+#f. I would recommend the treatment I had to a close relative or friend
+  result<-questionr::freq(temp.dd$e11f,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "f. I would recommend the treatment I had to a close relative or friend")
+rm(temp.dd) 
+```
+
+## Georgia
+```{r e116, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Georgia.20"), ]
+#a. I had all the information I needed when  a  treatment  was  chosen  for my prostate cancer
+  result<-questionr::freq(temp.dd$e11a,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "a. I had all the information I needed when  a  treatment  was  chosen  for my prostate cancer")
+#b. My doctors told me the whole story about the effects of treatment
+  result<-questionr::freq(temp.dd$e11b,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "b. My doctors told me the whole story about the effects of treatment")
+#c. I knew the right questions to ask my doctor
+  result<-questionr::freq(temp.dd$e11c,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "c. I knew the right questions to ask my doctor")
+#d. I had enough time to make a decision about my treatment 
+  result<-questionr::freq(temp.dd$e11d,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "d. I had enough time to make a decision about my treatment ")
+#e. I am satisfied with the choices I made in treating my prostate cancer
+  result<-questionr::freq(temp.dd$e11e,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "e. I am satisfied with the choices I made in treating my prostate cancer")
+#f. I would recommend the treatment I had to a close relative or friend
+  result<-questionr::freq(temp.dd$e11f,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "f. I would recommend the treatment I had to a close relative or friend")
+rm(temp.dd) 
+```
+
+## Michigan
+```{r e117, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Michigan.61"), ]
+#a. I had all the information I needed when  a  treatment  was  chosen  for my prostate cancer
+  result<-questionr::freq(temp.dd$e11a,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "a. I had all the information I needed when  a  treatment  was  chosen  for my prostate cancer")
+#b. My doctors told me the whole story about the effects of treatment
+  result<-questionr::freq(temp.dd$e11b,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "b. My doctors told me the whole story about the effects of treatment")
+#c. I knew the right questions to ask my doctor
+  result<-questionr::freq(temp.dd$e11c,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "c. I knew the right questions to ask my doctor")
+#d. I had enough time to make a decision about my treatment 
+  result<-questionr::freq(temp.dd$e11d,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "d. I had enough time to make a decision about my treatment ")
+#e. I am satisfied with the choices I made in treating my prostate cancer
+  result<-questionr::freq(temp.dd$e11e,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "e. I am satisfied with the choices I made in treating my prostate cancer")
+#f. I would recommend the treatment I had to a close relative or friend
+  result<-questionr::freq(temp.dd$e11f,total = TRUE)
+  kable(result, format = "simple", align = 'l', caption = "f. I would recommend the treatment I had to a close relative or friend")
+rm(temp.dd) 
+```
+
+
+
+# E14 {.tabset}
+
+# E15 {.tabset}
+- E15. Since you were diagnosed, did your doctor ever tell you that your prostate cancer came back (recurred) or progressed (got worse)?
+
+## All data
+```{r E15}
+  e15 <- as.factor(d[,"e15"])
+  levels(e15) <- list(No="1",
+                     Yes="2",
+                     Dont_know_not_sure="88",
+                     Scantron_Error="*")
+  e15 <- ordered(e15, c( "No","Yes","Dont_know_not_sure","Scantron_Error"))
+  
+  new.d <- data.frame(new.d, e15)
+  new.d <- apply_labels(new.d, e15 = "recurred or worse")
+  temp.d <- data.frame (new.d, e15)  
+  
+  result<-questionr::freq(temp.d$e15,total = TRUE)
+  kable(result, format = "simple", align = 'l')
+```
+
+## LA County
+```{r e151, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Los Angeles County.80"), ]
+  result<-questionr::freq(temp.dd$e15,total = TRUE)
+  kable(result, format = "simple", align = 'l')
+rm(temp.dd) 
+```
+
+## Northern CA
+```{r e152, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Northern CA.30"), ]
+  result<-questionr::freq(temp.dd$e15,total = TRUE)
+  kable(result, format = "simple", align = 'l')
+rm(temp.dd) 
+```
+
+## Greater CA
+```{r e153, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Greater CA.10"), ]
+  result<-questionr::freq(temp.dd$e15,total = TRUE)
+  kable(result, format = "simple", align = 'l')
+rm(temp.dd) 
+```
+
+## Detroit
+```{r e154, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Detroit.60"), ]
+  result<-questionr::freq(temp.dd$e15,total = TRUE)
+  kable(result, format = "simple", align = 'l')
+rm(temp.dd) 
+```
+
+## Louisiana
+```{r e155, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Louisiana.40"), ]
+  result<-questionr::freq(temp.dd$e15,total = TRUE)
+  kable(result, format = "simple", align = 'l')
+rm(temp.dd) 
+```
+
+## Georgia
+```{r e156, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Georgia.20"), ]
+  result<-questionr::freq(temp.dd$e15,total = TRUE)
+  kable(result, format = "simple", align = 'l')
+rm(temp.dd) 
+```
+
+## Michigan
+```{r e157, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Michigan.61"), ]
+  result<-questionr::freq(temp.dd$e15,total = TRUE)
+  kable(result, format = "simple", align = 'l')
+rm(temp.dd) 
+```
+
+# G1 {.tabset}
+- G1. What is your current marital status?
+
+## All data
+```{r g1}
+  g1 <- as.factor(d[,"g1"])
+  levels(g1) <- list(Married_partner="1",
+                     Separated="2",
+                     Divorced="3",
+                     Widowed="4",
+                     Never_married="5",
+                     Scantron_Error="*")
+  g1 <- ordered(g1, c("Married_partner","Separated","Divorced","Widowed","Never_married","Scantron_Error"))
+  
+  new.d <- data.frame(new.d, g1)
+  new.d <- apply_labels(new.d, g1 = "current marital status")
+  temp.d <- data.frame (new.d, g1)  
+  
+  result<-questionr::freq(temp.d$g1,total = TRUE)
+  kable(result, format = "simple", align = 'l')
+```
+
+## LA County
+```{r g11, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Los Angeles County.80"), ]
+  result<-questionr::freq(temp.dd$g1,total = TRUE)
+  kable(result, format = "simple", align = 'l')
+rm(temp.dd) 
+```
+
+## Northern CA
+```{r g12, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Northern CA.30"), ]
+  result<-questionr::freq(temp.dd$g1,total = TRUE)
+  kable(result, format = "simple", align = 'l')
+rm(temp.dd) 
+```
+
+## Greater CA
+```{r g13, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Greater CA.10"), ]
+  result<-questionr::freq(temp.dd$g1,total = TRUE)
+  kable(result, format = "simple", align = 'l')
+rm(temp.dd) 
+```
+
+## Detroit
+```{r g14, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Detroit.60"), ]
+  result<-questionr::freq(temp.dd$g1,total = TRUE)
+  kable(result, format = "simple", align = 'l')
+rm(temp.dd) 
+```
+
+## Louisiana
+```{r g15, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Louisiana.40"), ]
+  result<-questionr::freq(temp.dd$g1,total = TRUE)
+  kable(result, format = "simple", align = 'l')
+rm(temp.dd) 
+```
+
+## Georgia
+```{r g16, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Georgia.20"), ]
+  result<-questionr::freq(temp.dd$g1,total = TRUE)
+  kable(result, format = "simple", align = 'l')
+rm(temp.dd) 
+```
+
+## Michigan
+```{r g17, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Michigan.61"), ]
+  result<-questionr::freq(temp.dd$g1,total = TRUE)
+  kable(result, format = "simple", align = 'l')
+rm(temp.dd) 
+```
+
+# G3 {.tabset}
+- G3. How do you identify yourself?
+
+## All data
+```{r g3}
+  g3 <- as.factor(d[,"g3"])
+  levels(g3) <- list(Straight_heterosexual="1",
+                     Bisexual="2",
+                     Gay_homosexual="3",
+                     Other="4",
+                     Prefer_not_answer="99",
+                     Scantron_Error="*")
+  g3 <- ordered(g3, c("Straight_heterosexual","Bisexual","Gay_homosexual","Other","Prefer_not_answer","Scantron_Error"))
+  
+  new.d <- data.frame(new.d, g3)
+  new.d <- apply_labels(new.d, g3 = "self-identify")
+  temp.d <- data.frame (new.d, g3)  
+  
+  result<-questionr::freq(temp.d$g3,total = TRUE)
+  kable(result, format = "simple", align = 'l')
+```
+
+## LA County
+```{r g31, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Los Angeles County.80"), ]
+  result<-questionr::freq(temp.dd$g3,total = TRUE)
+  kable(result, format = "simple", align = 'l')
+rm(temp.dd) 
+```
+
+## Northern CA
+```{r g32, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Northern CA.30"), ]
+  result<-questionr::freq(temp.dd$g3,total = TRUE)
+  kable(result, format = "simple", align = 'l')
+rm(temp.dd) 
+```
+
+## Greater CA
+```{r g33, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Greater CA.10"), ]
+  result<-questionr::freq(temp.dd$g3,total = TRUE)
+  kable(result, format = "simple", align = 'l')
+rm(temp.dd) 
+```
+
+## Detroit
+```{r g34, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Detroit.60"), ]
+  result<-questionr::freq(temp.dd$g3,total = TRUE)
+  kable(result, format = "simple", align = 'l')
+rm(temp.dd) 
+```
+
+## Louisiana
+```{r g35, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Louisiana.40"), ]
+  result<-questionr::freq(temp.dd$g3,total = TRUE)
+  kable(result, format = "simple", align = 'l')
+rm(temp.dd) 
+```
+
+## Georgia
+```{r g36, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Georgia.20"), ]
+  result<-questionr::freq(temp.dd$g3,total = TRUE)
+  kable(result, format = "simple", align = 'l')
+rm(temp.dd) 
+```
+
+## Michigan
+```{r g37, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Michigan.61"), ]
+  result<-questionr::freq(temp.dd$g3,total = TRUE)
+  kable(result, format = "simple", align = 'l')
+rm(temp.dd) 
+```
+
+# G4A {.tabset}
+- G4A. What is the HIGHEST level of education you have completed?
+
+## All data
+```{r g4a}
+  g4a <- as.factor(d[,"g4a"])
+  levels(g4a) <- list(Grade_school_or_less="1",
+                     Some_high_school="2",
+                     High_School_grad_GED="3",
+                     Vocational_school="4",
+                     Some_college="5",
+                     Associate_degree="6",
+                     College_grad="7",
+                     Some_grad_education="8",
+                     Grad_degree="9",
+                     Scantron_Error="**")
+  g4a <- ordered(g4a, c("Grade_school_or_less","Some_high_school","High_School_grad_GED","Vocational_school",
+                        "Some_college","Associate_degree","College_grad","Some_grad_education","Grad_degree","Scantron_Error"))
+  
+  new.d <- data.frame(new.d, g4a)
+  new.d <- apply_labels(new.d, g4a = "education")
+  temp.d <- data.frame (new.d, g4a)  
+  
+  result<-questionr::freq(temp.d$g4a, cum = TRUE,total = TRUE)
+  kable(result, format = "simple", align = 'l')
+```
+
+## LA County
+```{r g4a1, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Los Angeles County.80"), ]
+  result<-questionr::freq(temp.dd$g4a, cum = TRUE,total = TRUE)
+  kable(result, format = "simple", align = 'l')
+rm(temp.dd) 
+```
+
+## Northern CA
+```{r g4a2, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Northern CA.30"), ]
+  result<-questionr::freq(temp.dd$g4a, cum = TRUE,total = TRUE)
+  kable(result, format = "simple", align = 'l')
+rm(temp.dd) 
+```
+
+## Greater CA
+```{r g4a3, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Greater CA.10"), ]
+  result<-questionr::freq(temp.dd$g4a, cum = TRUE,total = TRUE)
+  kable(result, format = "simple", align = 'l')
+rm(temp.dd) 
+```
+
+## Detroit
+```{r g4a4, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Detroit.60"), ]
+  result<-questionr::freq(temp.dd$g4a, cum = TRUE,total = TRUE)
+  kable(result, format = "simple", align = 'l')
+rm(temp.dd) 
+```
+
+## Louisiana
+```{r g4a5, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Louisiana.40"), ]
+  result<-questionr::freq(temp.dd$g4a, cum = TRUE,total = TRUE)
+  kable(result, format = "simple", align = 'l')
+rm(temp.dd) 
+```
+
+## Georgia
+```{r g4a6, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Georgia.20"), ]
+  result<-questionr::freq(temp.dd$g4a, cum = TRUE,total = TRUE)
+  kable(result, format = "simple", align = 'l')
+rm(temp.dd) 
+```
+
+## Michigan
+```{r g4a7, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Michigan.61"), ]
+  result<-questionr::freq(temp.dd$g4a, cum = TRUE,total = TRUE)
+  kable(result, format = "simple", align = 'l')
+rm(temp.dd) 
+```
+
+# G5 {.tabset}
+- G5. Which one of the following best describes what you currently do?
+
+## All data
+```{r g5}
+  g5 <- as.factor(d[,"g5"])
+  levels(g5) <- list(full_time="1",
+                     part_time="2",
+                     Look_for_work_unemployed="3",
+                     Retired="4",
+                     Disability_permanently="5",
+                     Disability_temporarily="6",
+                     Volunteer="7",
+                     Other="8",
+                     Scantron_Error="*")
+  g5 <- ordered(g5, c("full_time","part_time","Look_for_work_unemployed","Retired",
+                      "Disability_permanently","Disability_temporarily","Volunteer","Other","Scantron_Error"))
+  
+  new.d <- data.frame(new.d, g5)
+  new.d <- apply_labels(new.d, g5 = "occupation")
+  temp.d <- data.frame (new.d, g5)  
+  
+  result<-questionr::freq(temp.d$g5,total = TRUE)
+  kable(result, format = "simple", align = 'l')
+```
+
+## LA County
+```{r g51, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Los Angeles County.80"), ]
+  result<-questionr::freq(temp.dd$g5,total = TRUE)
+  kable(result, format = "simple", align = 'l')
+rm(temp.dd) 
+```
+
+## Northern CA
+```{r g52, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Northern CA.30"), ]
+  result<-questionr::freq(temp.dd$g5,total = TRUE)
+  kable(result, format = "simple", align = 'l')
+rm(temp.dd) 
+```
+
+## Greater CA
+```{r g53, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Greater CA.10"), ]
+  result<-questionr::freq(temp.dd$g5,total = TRUE)
+  kable(result, format = "simple", align = 'l')
+rm(temp.dd) 
+```
+
+## Detroit
+```{r g54, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Detroit.60"), ]
+  result<-questionr::freq(temp.dd$g5,total = TRUE)
+  kable(result, format = "simple", align = 'l')
+rm(temp.dd) 
+```
+
+## Louisiana
+```{r g55, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Louisiana.40"), ]
+  result<-questionr::freq(temp.dd$g5,total = TRUE)
+  kable(result, format = "simple", align = 'l')
+rm(temp.dd) 
+```
+
+## Georgia
+```{r g56, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Georgia.20"), ]
+  result<-questionr::freq(temp.dd$g5,total = TRUE)
+  kable(result, format = "simple", align = 'l')
+rm(temp.dd) 
+```
+
+## Michigan
+```{r g57, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Michigan.61"), ]
+  result<-questionr::freq(temp.dd$g5,total = TRUE)
+  kable(result, format = "simple", align = 'l')
+rm(temp.dd) 
+```
+
+# G7 {.tabset}
+- G7. What is your best estimate of your TOTAL FAMILY INCOME from all sources, before taxes, in the last calendar year? “Total family income” refers to your income PLUS the income of all family members living in this household (including cohabiting partners, and armed forces members living at home). This includes money from pay checks, government benefit programs, child support, social security, retirement funds, unemployment benefits, and
+disability.
+  + 1=Less than $15,000 
+  + 2=$15,000 to $35,999
+  + 3=$36,000 to $45,999
+  + 4=$46,000 to $65,999
+  + 5=$66,000 to $99,999
+  + 6=$100,000 to $149,999
+  + 7=$150,000 to $199,999
+  + 8= $200,000 or more
+
+## All data
+```{r g7}
+  g7 <- as.factor(d[,"g7"])
+  levels(g7) <- list(Less_than_15000="1",
+                     Range_15000_35999="2",
+                     Range_36000_45999="3",
+                     Range_46000_65999="4",
+                     Range_66000_99999="5",
+                     Range_100000_149999="6",
+                     Range_150000_199999="7",
+                     more_2000000="8",
+                     Scantron_Error="*")
+  g7 <- ordered(g7, c("Less_than_15000","Range_15000_35999","Range_36000_45999","Range_46000_65999",
+                      "Range_66000_99999","Range_100000_149999","Range_150000_199999","more_2000000","Scantron_Error"))
+  
+  new.d <- data.frame(new.d, g7)
+  new.d <- apply_labels(new.d, g7 = "family income")
+  temp.d <- data.frame (new.d, g7)  
+  
+  result<-questionr::freq(temp.d$g7, cum = TRUE, total = TRUE)
+  kable(result, format = "simple", align = 'l')
+```
+
+## LA County
+```{r g71, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Los Angeles County.80"), ]
+  result<-questionr::freq(temp.dd$g7, cum = TRUE, total = TRUE)
+  kable(result, format = "simple", align = 'l')
+rm(temp.dd) 
+```
+
+## Northern CA
+```{r g72, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Northern CA.30"), ]
+  result<-questionr::freq(temp.dd$g7, cum = TRUE,total = TRUE)
+  kable(result, format = "simple", align = 'l')
+rm(temp.dd) 
+```
+
+## Greater CA
+```{r g73, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Greater CA.10"), ]
+  result<-questionr::freq(temp.dd$g7, cum = TRUE,total = TRUE)
+  kable(result, format = "simple", align = 'l')
+rm(temp.dd) 
+```
+
+## Detroit
+```{r g74, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Detroit.60"), ]
+  result<-questionr::freq(temp.dd$g7, cum = TRUE,total = TRUE)
+  kable(result, format = "simple", align = 'l')
+rm(temp.dd) 
+```
+
+## Louisiana
+```{r g75, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Louisiana.40"), ]
+  result<-questionr::freq(temp.dd$g7, cum = TRUE,total = TRUE)
+  kable(result, format = "simple", align = 'l')
+rm(temp.dd) 
+```
+
+## Georgia
+```{r g76, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Georgia.20"), ]
+  result<-questionr::freq(temp.dd$g7, cum = TRUE,total = TRUE)
+  kable(result, format = "simple", align = 'l')
+rm(temp.dd) 
+```
+
+## Michigan
+```{r g77, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Michigan.61"), ]
+  result<-questionr::freq(temp.dd$g7, cum = TRUE,total = TRUE)
+  kable(result, format = "simple", align = 'l')
+rm(temp.dd) 
+```
+
+# G10 {.tabset}
+- G10. Is the home you live in:
+  + 1=Owned or being bought by you (or someone in the household) 
+  + 2=Rented for money
+  + 3=Other
+
+## All data
+```{r g10}
+  g10 <- as.factor(d[,"g10"])
+  levels(g10) <- list(Owned_by_you="1",
+                     Rented="2",
+                     Other="3",
+                     Scantron_Error="*")
+  g10 <- ordered(g10, c("Owned_by_you","Rented","Other","Scantron_Error"))
+  
+  new.d <- data.frame(new.d, g10)
+  new.d <- apply_labels(new.d, g10 = "Owned or rented")
+  temp.d <- data.frame (new.d, g10)  
+  
+  result<-questionr::freq(temp.d$g10, total = TRUE)
+  kable(result, format = "simple", align = 'l')
+```
+
+## LA County
+```{r g101, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Los Angeles County.80"), ]
+  result<-questionr::freq(temp.dd$g10, total = TRUE)
+  kable(result, format = "simple", align = 'l')
+rm(temp.dd) 
+```
+
+## Northern CA
+```{r g102, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Northern CA.30"), ]
+  result<-questionr::freq(temp.dd$g10, total = TRUE)
+  kable(result, format = "simple", align = 'l')
+rm(temp.dd) 
+```
+
+## Greater CA
+```{r g103, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Greater CA.10"), ]
+  result<-questionr::freq(temp.dd$g10, total = TRUE)
+  kable(result, format = "simple", align = 'l')
+rm(temp.dd) 
+```
+
+## Detroit
+```{r g104, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Detroit.60"), ]
+  result<-questionr::freq(temp.dd$g10, total = TRUE)
+  kable(result, format = "simple", align = 'l')
+rm(temp.dd) 
+```
+
+## Louisiana
+```{r g105, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Louisiana.40"), ]
+  result<-questionr::freq(temp.dd$g10,total = TRUE)
+  kable(result, format = "simple", align = 'l')
+rm(temp.dd) 
+```
+
+## Georgia
+```{r g106, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Georgia.20"), ]
+  result<-questionr::freq(temp.dd$g10, total = TRUE)
+  kable(result, format = "simple", align = 'l')
+rm(temp.dd) 
+```
+
+## Michigan
+```{r g107, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Michigan.61"), ]
+  result<-questionr::freq(temp.dd$g10, total = TRUE)
+  kable(result, format = "simple", align = 'l')
+rm(temp.dd) 
+```
+
+
+# G11 {.tabset}
+- G11. If you lost all your current source(s) of household income (your paycheck, public assistance, or other forms of income), how long could you continue to live at
+your current address and standard of living?
+  + 1=Less than 1 month 
+  + 2=1 to 2 months
+  + 3=3 to 6 months 
+  + 4=More than 6 months
+
+## All data
+```{r g11all}
+  g11 <- as.factor(d[,"g11"])
+  levels(g11) <- list(Less_than_1_month="1",
+                     Range_1_2="2",
+                     Range_3_6="3",
+                     More_than_6_months="4",
+                     Scantron_Error="*")
+  g11 <- ordered(g11, c("Less_than_1_month","Range_1_2","Range_3_6","More_than_6_months","Scantron_Error"))
+  
+  new.d <- data.frame(new.d, g11)
+  new.d <- apply_labels(new.d, g11 = "Owned or rented")
+  temp.d <- data.frame (new.d, g11)  
+  
+  result<-questionr::freq(temp.d$g11, cum = TRUE, total = TRUE)
+  kable(result, format = "simple", align = 'l')
+```
+
+## LA County
+```{r g111, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Los Angeles County.80"), ]
+  result<-questionr::freq(temp.dd$g11, cum = TRUE, total = TRUE)
+  kable(result, format = "simple", align = 'l')
+rm(temp.dd) 
+```
+
+## Northern CA
+```{r g112, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Northern CA.30"), ]
+  result<-questionr::freq(temp.dd$g11, cum = TRUE, total = TRUE)
+  kable(result, format = "simple", align = 'l')
+rm(temp.dd) 
+```
+
+## Greater CA
+```{r g113, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Greater CA.10"), ]
+  result<-questionr::freq(temp.dd$g11, cum = TRUE, total = TRUE)
+  kable(result, format = "simple", align = 'l')
+rm(temp.dd) 
+```
+
+## Detroit
+```{r g114, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Detroit.60"), ]
+  result<-questionr::freq(temp.dd$g11, cum = TRUE,total = TRUE)
+  kable(result, format = "simple", align = 'l')
+rm(temp.dd) 
+```
+
+## Louisiana
+```{r g115, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Louisiana.40"), ]
+  result<-questionr::freq(temp.dd$g11, cum = TRUE, total = TRUE)
+  kable(result, format = "simple", align = 'l')
+rm(temp.dd) 
+```
+
+## Georgia
+```{r g116, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Georgia.20"), ]
+  result<-questionr::freq(temp.dd$g11, cum = TRUE,total = TRUE)
+  kable(result, format = "simple", align = 'l')
+rm(temp.dd) 
+```
+
+## Michigan
+```{r g117, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Michigan.61"), ]
+  result<-questionr::freq(temp.dd$g11, cum = TRUE,total = TRUE)
+  kable(result, format = "simple", align = 'l')
+rm(temp.dd) 
+```
+
+
+
+
+
+
+
+
+

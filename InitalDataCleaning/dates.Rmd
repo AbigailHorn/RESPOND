@@ -1,0 +1,404 @@
+---
+title: RESPOND-Registry data-All
+author: "Weijia Hu"
+date: "`r Sys.time()`"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    df_print: paged
+    code_folding: hide
+  pdf_document: default
+---
+
+```{r setup, include=FALSE, echo=FALSE}
+require("RPostgreSQL") # for PostgreSQL
+library(zoo) # for date conversion
+library(expss) # for labels
+library(DBI) # for Database connectivity
+library(summarytools) # for summarizing variables
+library(tidyverse)
+library(plyr)
+library(knitr) # for creating tables
+# set working directory
+#setwd("~/Google Drive File Stream/My Drive/Projects/RESPOND/CORE D/InitalDataCleaning")
+
+```
+
+```{r input registry data, echo=FALSE}
+load("VCombAll20210208.Rda")
+d <- JoinAllRegScantron
+#print(names(d))
+```
+
+
+```{r first look - registry data - 30 vars, echo=FALSE}
+
+#print(names(d))
+#print(dim(d))
+
+new.d <- data.frame(matrix(ncol=0, nrow=nrow(d)))
+new.d.n <- data.frame(matrix(ncol=0, nrow=nrow(d)))
+new.d.1 <- data.frame(matrix(ncol=0, nrow=nrow(d)))
+
+```
+
+```{css, echo = FALSE}
+caption {
+      color: Black;
+      font-weight: bold;
+      font-size: 1.5em;
+      text-align: center
+    }
+```
+
+```{r siteid}
+
+  siteid <- as.factor(trimws(d[,"siteid"]))
+  #new.d.n <- data.frame(new.d.n, siteid) # keep NAACCR coding
+  
+  # NEED REGISTRY NAMES!!
+ 
+  
+  #replace number with names
+  
+  levels(siteid)[levels(siteid)=="80"] <- "Los Angeles County.80"
+  levels(siteid)[levels(siteid)=="30"] <- "Northern CA.30"
+  levels(siteid)[levels(siteid)=="10"] <- "Greater CA.10"
+  levels(siteid)[levels(siteid)=="60"] <- "Detroit.60"
+  levels(siteid)[levels(siteid)=="40"] <- "Louisiana.40"
+  levels(siteid)[levels(siteid)=="20"] <- "Georgia.20"
+  levels(siteid)[levels(siteid)=="61"] <- "Michigan.61"
+  
+  
+  new.d <- data.frame(new.d, siteid)
+  new.d <- apply_labels(new.d, siteid = "Site ID")
+  new.d.1 <- data.frame(new.d.1, siteid)
+  
+  #cro(new.d$siteid) # this is pretty but doesn't show NAs
+  #summary(new.d$siteid)
+  
+  #Using kable function to form a nice table
+  
+  siteid_count<-count(new.d$siteid)
+  colnames(siteid_count)<- c("Registry", "Total")
+  kable(siteid_count, format = "simple", align = 'l', caption = "Overview of 7 Registries")
+
+```
+
+
+# AGE AT DIAGNOSIS {.tabset}
+- Description: Age of the patient at diagnosis in complete years. Different tumors for the same patient may have different values.
+- Codes
+   + 000	Less than 1 year old; diagnosed in utero
+   + 001	1 year old, but less than 2 years
+   + 002	2 years old
+...
+   + 101	101 years old
+...
+   + 120	120 years old
+   + 999	Unknown age
+
+- Reference page: http://datadictionary.naaccr.org/default.aspx?c=10&Version=18#230
+
+<br> 
+  
+## All data
+
+```{r ageatdiagnosis,,message=FALSE, results='asis'}
+st_css() #IMPORTANT!
+  ageatdiagnosis <- trimws(d[,"ageatdiagnosis"])
+  ageatdiagnosis <- ifelse(ageatdiagnosis=="999", NA, ageatdiagnosis)
+  ageatdiagnosis <- as.numeric(ageatdiagnosis)
+  
+  new.d <- data.frame(new.d, ageatdiagnosis)
+  new.d <- apply_labels(new.d, ageatdiagnosis = "age_at_diagnosis")
+  new.d.1 <- data.frame(new.d.1, ageatdiagnosis)
+  
+  #Using kable function to form a nice table
+  temp.d <- data.frame (new.d.1, ageatdiagnosis)
+  summarytools::view(dfSummary(new.d$ageatdiagnosis, style = 'grid',
+                               max.distinct.values = 10, plain.ascii =   FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+```
+
+## LA County
+
+```{r ageatdiagnosis 1.LA County,echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Los Angeles County.80"), ]
+temp.dd <- temp.dd[which(temp.dd$ageatdiagnosis == 2015), ]
+ageatdiagnosis<-as.data.frame(temp.dd$ageatdiagnosis)
+names(ageatdiagnosis)<-"age_at_diagnosis"
+summarytools::view(dfSummary(ageatdiagnosis, style = 'grid', max.distinct.values = 10, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE ), method = "render")
+rm(temp.dd)
+```
+
+## Northern CA
+
+```{r ageatdiagnosis 2.Northern CA,echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Northern CA.30"), ]
+ageatdiagnosis<-as.data.frame(temp.dd$ageatdiagnosis)
+names(ageatdiagnosis)<-"age_at_diagnosis"
+summarytools::view(dfSummary(ageatdiagnosis, style = 'grid', max.distinct.values = 10, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Greater CA
+
+```{r ageatdiagnosis 3.Greater CA,echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Greater CA.10"), ]
+ageatdiagnosis<-as.data.frame(temp.dd$ageatdiagnosis)
+names(ageatdiagnosis)<-"age_at_diagnosis"
+summarytools::view(dfSummary(ageatdiagnosis, style = 'grid', max.distinct.values = 10, plain.ascii = FALSE, valid.col = FALSE , headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Detroit
+
+```{r ageatdiagnosis 4.Detroit,echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Detroit.60"), ]
+ageatdiagnosis<-as.data.frame(temp.dd$ageatdiagnosis)
+names(ageatdiagnosis)<-"age_at_diagnosis"
+summarytools::view(dfSummary(ageatdiagnosis, style = 'grid', max.distinct.values = 10, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE ), method = "render")
+rm(temp.dd)
+```
+
+## Louisiana
+
+```{r ageatdiagnosis 5.Louisiana,echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Louisiana.40"), ]
+ageatdiagnosis<-as.data.frame(temp.dd$ageatdiagnosis)
+names(ageatdiagnosis)<-"age_at_diagnosis"
+summarytools::view(dfSummary(ageatdiagnosis, style = 'grid', max.distinct.values = 10, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE ), method = "render")
+rm(temp.dd)
+```
+
+## Georgia
+
+```{r ageatdiagnosis 6.Georgia,echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Georgia.20"), ]
+ageatdiagnosis<-as.data.frame(temp.dd$ageatdiagnosis)
+names(ageatdiagnosis)<-"age_at_diagnosis"
+summarytools::view(dfSummary(ageatdiagnosis, style = 'grid', max.distinct.values = 10, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE ), method = "render")
+rm(temp.dd)
+```
+
+## Michigan
+
+```{r ageatdiagnosis 7.Michigan,echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Michigan.61"), ]
+ageatdiagnosis<-as.data.frame(temp.dd$ageatdiagnosis)
+names(ageatdiagnosis)<-"age_at_diagnosis"
+summarytools::view(dfSummary(ageatdiagnosis, style = 'grid', max.distinct.values = 10, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+<br>
+
+# DATE OF BIRTH {.tabset}
+- Description: Date of birth of the patient. See Chapter X for date format. If age at diagnosis and year of diagnosis are known, but year of birth is unknown, then year of birth should be calculated and so coded. Only the year should be entered, left-justified. Estimate date of birth when information is not available. It is better to estimate than to leave birth date unknown.
+
+- date var
+- Reference page: http://datadictionary.naaccr.org/default.aspx?c=10&Version=18#240
+
+<br> 
+  
+## All data
+
+```{r dateofbirth,,message=FALSE, results='asis'}
+st_css() #IMPORTANT!
+  dateofbirth <- trimws(d[,"dateofbirth"])
+
+  select99 <- ifelse(is.na(dateofbirth), F, substr(dateofbirth, start=7, stop=8)=="99")
+  dateofbirth[select99] <- substr(dateofbirth[select99], start=1, stop=6)
+  
+  select6 <- ifelse(is.na(dateofbirth), F, nchar(trimws(dateofbirth))==6)
+  dateofbirth[select6] <- paste(dateofbirth[select6], "15", sep="")
+  
+  select4 <- ifelse(is.na(dateofbirth), F, nchar(trimws(dateofbirth))==4)
+  dateofbirth[select4] <- paste(dateofbirth[select4], "0615", sep="")
+  
+  dateofbirth <- as.Date(dateofbirth, c("%Y%m%d"))
+  
+  new.d <- data.frame(new.d, dateofbirth)
+  new.d <- apply_labels(new.d, dateofbirth = "date_of_birth")
+  #new.d.1 <- data.frame(new.d.1, dateofbirth)
+  
+  #Using kable function to form a nice table
+  temp.d <- data.frame (new.d.1, dateofbirth)
+  summarytools::view(dfSummary(new.d$dateofbirth, style = 'grid',
+                               max.distinct.values = 5, plain.ascii =   FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+```
+
+## LA County
+```{r dateofbirth 1.LA County, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Los Angeles County.80"), ]
+dateofbirth<-as.data.frame(temp.dd$dateofbirth)
+names(dateofbirth)<-"date_of_birth"
+summarytools::view(dfSummary(dateofbirth, style = 'grid', max.distinct.values = 5, plain.ascii = FALSE, valid.col = FALSE , headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Northern CA
+```{r dateofbirth 2.Northern CA, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Northern CA.30"), ]
+dateofbirth<-as.data.frame(temp.dd$dateofbirth)
+names(dateofbirth)<-"date_of_birth"
+summarytools::view(dfSummary(dateofbirth, style = 'grid', max.distinct.values = 5, plain.ascii = FALSE, valid.col = FALSE , headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Greater CA
+```{r dateofbirth 3.Greater CA, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Greater CA.10"), ]
+dateofbirth<-as.data.frame(temp.dd$dateofbirth)
+names(dateofbirth)<-"date_of_birth"
+summarytools::view(dfSummary(dateofbirth, style = 'grid', max.distinct.values = 5, plain.ascii = FALSE, valid.col = FALSE , headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Detroit
+```{r dateofbirth 4.Detroit, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Detroit.60"), ]
+dateofbirth<-as.data.frame(temp.dd$dateofbirth)
+names(dateofbirth)<-"date_of_birth"
+summarytools::view(dfSummary(dateofbirth, style = 'grid', max.distinct.values = 5, plain.ascii = FALSE, valid.col = FALSE , headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Louisiana
+```{r dateofbirth 5.Louisiana, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Louisiana.40"), ]
+dateofbirth<-as.data.frame(temp.dd$dateofbirth)
+names(dateofbirth)<-"date_of_birth"
+summarytools::view(dfSummary(dateofbirth, style = 'grid', max.distinct.values = 5, plain.ascii = FALSE, valid.col = FALSE , headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Georgia
+```{r dateofbirth 6.Georgia, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Georgia.20"), ]
+dateofbirth<-as.data.frame(temp.dd$dateofbirth)
+names(dateofbirth)<-"date_of_birth"
+summarytools::view(dfSummary(dateofbirth, style = 'grid', max.distinct.values = 5, plain.ascii = FALSE, valid.col = FALSE , headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Michigan
+```{r dateofbirth 7.Michigan, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Michigan.61"), ]
+dateofbirth<-as.data.frame(temp.dd$dateofbirth)
+names(dateofbirth)<-"date_of_birth"
+summarytools::view(dfSummary(dateofbirth, style = 'grid', max.distinct.values = 5, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+<br>
+
+# DATE OF DIAGNOSIS {.tabset}
+
+<br>
+
+- Date of initial diagnosis by a recognized medical practitioner for the tumor being reported whether clinically or microscopically confirmed. See Chapter X for date format.
+
+- For more discussion on determining date of diagnosis, consult the SEER Program Coding and Staging Manual or CoC STORE manual.
+
+- Reference page: http://datadictionary.naaccr.org/default.aspx?c=10&Version=21#390
+
+<br>
+
+## All data
+```{r data of diagnosis, results='asis', message=FALSE}
+  dateofdiagnosis <- trimws(d[,"dateofdiagnosis"])
+  #new.d.n <- data.frame(new.d.n, dateofdiagnosis) # keep NAACCR coding
+  
+  select99 <- ifelse(is.na(dateofdiagnosis), F, substr(dateofdiagnosis, start=7, stop=8)=="99")
+  dateofdiagnosis[select99] <- substr(dateofdiagnosis[select99], start=1, stop=6)
+  
+  select6 <- ifelse(is.na(dateofdiagnosis), F, nchar(trimws(dateofdiagnosis))==6)
+  dateofdiagnosis[select6] <- paste(dateofdiagnosis[select6], "15", sep="")
+  
+  select4 <- ifelse(is.na(dateofdiagnosis), F, nchar(trimws(dateofdiagnosis))==4)
+  dateofdiagnosis[select4] <- paste(dateofdiagnosis[select4], "0615", sep="")
+  
+  dateofdiagnosis <- as.Date(dateofdiagnosis, c("%Y%m%d"))
+
+  new.d <- data.frame(new.d, dateofdiagnosis)
+  new.d <- apply_labels(new.d, dateofdiagnosis = "Date of Diagnosis")
+
+  temp.d <- data.frame (new.d.1, dateofdiagnosis)
+summarytools::view(dfSummary(new.d$dateofdiagnosis, style = 'grid', max.distinct.values = 5, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+
+```
+
+## LA County
+
+```{r dodiag 1.LA County, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Los Angeles County.80"), ]
+dateofdiagnosis<-as.data.frame(temp.dd$dateofdiagnosis)
+names(dateofdiagnosis)<-"date_of_diagnosis"
+summarytools::view(dfSummary(dateofdiagnosis, style = 'grid', max.distinct.values = 5, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Northern CA
+
+```{r dodiag 2.Northern CA, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Northern CA.30"), ]
+dateofdiagnosis<-as.data.frame(temp.dd$dateofdiagnosis)
+names(dateofdiagnosis)<-"date_of_diagnosis"
+summarytools::view(dfSummary(dateofdiagnosis, style = 'grid', max.distinct.values = 5, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Greater CA
+
+```{r dodiag 3.Greater CA, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Greater CA.10"), ]
+dateofdiagnosis<-as.data.frame(temp.dd$dateofdiagnosis)
+names(dateofdiagnosis)<-"date_of_diagnosis"
+summarytools::view(dfSummary(dateofdiagnosis, style = 'grid', max.distinct.values = 5, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Detroit
+
+```{r dodiag 4.Detroit, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Detroit.60"), ]
+dateofdiagnosis<-as.data.frame(temp.dd$dateofdiagnosis)
+names(dateofdiagnosis)<-"date_of_diagnosis"
+summarytools::view(dfSummary(dateofdiagnosis, style = 'grid', max.distinct.values = 5, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Louisiana
+
+```{r dodiag 5.Louisiana, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Louisiana.40"), ]
+dateofdiagnosis<-as.data.frame(temp.dd$dateofdiagnosis)
+names(dateofdiagnosis)<-"date_of_diagnosis"
+summarytools::view(dfSummary(dateofdiagnosis, style = 'grid', max.distinct.values = 5, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Georgia
+
+```{r dodiag 6.Georgia, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Georgia.20"), ]
+dateofdiagnosis<-as.data.frame(temp.dd$dateofdiagnosis)
+names(dateofdiagnosis)<-"date_of_diagnosis"
+summarytools::view(dfSummary(dateofdiagnosis, style = 'grid', max.distinct.values = 5, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+## Michigan
+
+```{r dodiag 7.Michigan, echo=FALSE}
+temp.dd <- temp.d[which(temp.d$siteid == "Michigan.61"), ]
+dateofdiagnosis<-as.data.frame(temp.dd$dateofdiagnosis)
+names(dateofdiagnosis)<-"date_of_diagnosis"
+summarytools::view(dfSummary(dateofdiagnosis, style = 'grid', max.distinct.values = 5, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+rm(temp.dd)
+```
+
+<br>
+

@@ -1,0 +1,66 @@
+---
+title: "RESPOND Data Investigation"
+author: "David Conti and Rich Pinder"
+date: "`r Sys.time()`"
+output:
+  html_document:
+    df_print: paged
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+require("RPostgreSQL") # for PostgreSQL
+library(zoo) # for data conversion
+library(expss) # for labels
+library(DBI) # for Database connectivity
+library(summarytools) # for summarizing variables
+```
+
+```{r input registry data}
+load("VRegAll20210116.Rda")
+r <- VRegAll
+print(names(r))
+```
+
+```{r input survey data}
+load("VSurvAll20210116.Rda")
+s <- VSurvAll
+print(names(s))
+```
+
+
+```{r first look - registry data - 36 vars FIXED, rid=respondid; siteid added}
+varName.list <- names(r)
+varName.list <- c("rid","addratdxstate","maritalstatusatdx","race1","ageatdiagnosis",
+                  "dateofbirth","birthplace","birthplacestate","birthplacecountry","dateofdiagnosis",
+                  "primarysite","grade","typeofreportingsource","primarypayeratdx","derivedsummarystage2018",
+                  "derivedeod2018stagegroup","rxsummtreatmentstatus","rxsummsurgprimsite","rxsummradiation","rxsummchemo",
+                  "rxsummhormone","vitalstatus","derivedss2000","derivedajcc7stagegrp","derivedseercmbstggrp",
+                  "gleasonpatternsclinical","gleasonpatternspathological","gleasonscoreclinical","gleasonscorepathological","gleasontertiarypattern",
+                  "gradeclinical","gradepathological","numberofcoresexamined","numberofcorespositive","prostatepathologicalextension","psalabvalue","siteid")
+  
+
+r <- r[,varName.list]
+print(names(r))
+
+```
+
+```{r first look - survey data - 108 vars, 29 questions}
+varName.list <- names(s)
+varName.list <- c("d4a","d4b","d4c","d4d","d4e","d4f","d4g","d4h","d4i","d4j","d4k",
+                  "d4l","surveyid","locationname","respondid","methodology","a1month",
+                  "a1year","a1not","a2","a3_1","a3_2","a3_3","a3_4","a3_5","a3_6","a3_7",
+                  "a3_8","a3_9","a3_10","a3_11","a3_12","a3_13","a3_14","a3_15","a3_16",
+                  "a3_17","a3_18","a3_19","a3_20","a3_21","a3_22","a3_23","a3_24","a3other",
+                  "a4month","a4year","a8","b3","c2a1","c2a2","c2a3","c4a1","c4a2","c4a3","d1aa",
+                  "d1ab","d1ba","d1bb","d1ca","d1cb","d1da","d1db","d1ea","d1eb","d1fa","d1fb","d1ga",
+                  "d1gb","d3b1","d3b2","d3b3","d5a","d5b","d5c","d5d","d5e","d5f","d5g","d5h","d5i","d5j",
+                  "d5k","e11a","e11b","e11c","e11d","e11e","e11f","f2lbs","f2kgs","f7","f7age","f7a",
+                  "f7b","f7bage","g1","g3","g4a","g5","g7","g8","g9a","g9b","g9c","g10","g11","g12")
+s <- s[,varName.list]
+print(names(s))
+```
+
+
+
+
