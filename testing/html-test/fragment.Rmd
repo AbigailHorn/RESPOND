@@ -12,12 +12,9 @@ output: html_fragment
 * Select a site from the drop-down menu
 * Use the navigation bar to find the section of the report you're interested in
 
-## Developers: Notes to improve this 
+## Developers: Let's make the site reports look nicer
 
-* Fix formatting
-  - Narrower side panel
-  - Navigation bar floating *under* the side panel?
-
-* Clean up html site reports
-  - Remove generic content (like the site numbers at the top)
-  - Make prettier
+* Better titles 
+* Remove the generic pieces (keep only pieces specific to a given site)
+* Use `formattable` to make nicer looking tables
+* Add some figures

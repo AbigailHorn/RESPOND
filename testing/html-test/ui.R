@@ -13,7 +13,8 @@
 
 library(shiny)
 shinyUI(fluidPage(
-  titlePanel("Detailed site demographic reports"),
+  #titlePanel("Detailed site demographic reports"),
+  titlePanel("Option 2: Shiny"),
   sidebarLayout(
     sidebarPanel(
       style = "position:fixed;width:15%;",
