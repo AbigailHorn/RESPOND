@@ -5,8 +5,8 @@ navbar:
   left:
     - text: "Home"
       href: index.html
-    - text: "Shiny Example"
-      href: https://abigail-horn.shinyapps.io/trainexample/
+    - text: "Pivot App"
+      href: https://abigail-horn.shinyapps.io/pivot-deploy2/
   right:
     - icon: fa-github fa-lg
       href: https://github.com/abigailhorn/RESPOND

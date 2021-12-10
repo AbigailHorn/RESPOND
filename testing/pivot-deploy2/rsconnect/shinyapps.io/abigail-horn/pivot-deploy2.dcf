@@ -5,7 +5,7 @@ account: abigail-horn
 server: shinyapps.io
 hostUrl: https://api.shinyapps.io/v1
 appId: 5303361
-bundleId: 5353788
+bundleId: 5354326
 url: https://abigail-horn.shinyapps.io/pivot-deploy2/
-when: 1639113058.48828
-lastSyncTime: 1639113058.48829
+when: 1639120538.2368
+lastSyncTime: 1639120538.23682

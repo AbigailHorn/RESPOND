@@ -8,17 +8,19 @@ library(here)
 
 # rsconnect::setAccountInfo(name='abigail-horn', token='31B8FC87628C3F8CDE3B886D5C085ED1', secret='1mfe25nVyMDUU8NmRD7SZWqCRAWvDrJ0wcE2r+3u')
 # library(rsconnect)
-# rsconnect::deployApp('testing/pivot-test/app5.R')
+# rsconnect::deployApp('testing/pivot-deploy2')
 
 
-load(path(here::here("InitalDataCleaning/Data/Clean Data/Shiny_Merge_2021_12_09.rda")))
-d <- d %>% dplyr::mutate(
-  clinical_stage_category = factor(clinical_stage_category, levels = c("high","med","low")),
-  gleason_category = factor(gleason_category, levels = c("high","med","low")),
-  D_Amico_risk_groups = factor(D_Amico_risk_groups, levels = c("high","med","low","Other")),
-  aggressiveness_grant = factor(aggressiveness_grant, levels = c("high","med","low", "Metastatic", "Other")),
-)
+# load(path(here::here("InitalDataCleaning/Data/Clean Data/Shiny_Merge_2021_12_09.rda")))
+# d.relevel <- d %>% dplyr::mutate(
+#   clinical_stage_category = factor(clinical_stage_category, levels = c("high","med","low")),
+#   gleason_category = factor(gleason_category, levels = c("high","med","low")),
+#   D_Amico_risk_groups = factor(D_Amico_risk_groups, levels = c("high","med","low","Other")),
+#   aggressiveness_grant = factor(aggressiveness_grant, levels = c("high","med","low", "Metastatic", "Other")),
+# )
+# # save(d.relevel, file ="testing/pivot-deploy2/Shiny_Merge_2021_12_09_relevel.rda")
 
+load("Shiny_Merge_2021_12_09_relevel.rda")
 
 # Weija data
 # load(path(here::here("InitalDataCleaning/Data/Clean Data/Clean_Scantron20211122.rda")))
@@ -91,7 +93,7 @@ server <- function(input, output) {
   
   output$pvt <- renderPivottabler({
     pt <- PivotTable$new()
-    pt$addData(d)
+    pt$addData(d.relevel)
     #pt$defineCalculation(calculationName="TotalNo.", summariseExpression="n()")
     
     pt$defineCalculation(calculationName="Count", summariseExpression="n()", 
