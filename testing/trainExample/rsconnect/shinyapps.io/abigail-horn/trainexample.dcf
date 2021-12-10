@@ -5,7 +5,7 @@ account: abigail-horn
 server: shinyapps.io
 hostUrl: https://api.shinyapps.io/v1
 appId: 5303270
-bundleId: 5353722
+bundleId: 5353792
 url: https://abigail-horn.shinyapps.io/trainexample/
-when: 1639111441.80122
-lastSyncTime: 1639111441.80123
+when: 1639113157.10294
+lastSyncTime: 1639113157.10295

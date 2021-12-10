@@ -1,0 +1,11 @@
+name: pivot-deploy2
+title:
+username:
+account: abigail-horn
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 5303361
+bundleId: 5353788
+url: https://abigail-horn.shinyapps.io/pivot-deploy2/
+when: 1639113058.48828
+lastSyncTime: 1639113058.48829

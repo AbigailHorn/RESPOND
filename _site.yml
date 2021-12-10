@@ -6,7 +6,7 @@ navbar:
     - text: "Home"
       href: index.html
     - text: "Shiny Example"
-      href: https://abigail-horn.shinyapps.io/html-test/
+      href: https://abigail-horn.shinyapps.io/trainexample/
   right:
     - icon: fa-github fa-lg
       href: https://github.com/abigailhorn/RESPOND
