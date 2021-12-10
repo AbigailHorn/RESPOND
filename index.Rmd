@@ -1,5 +1,5 @@
 ---
-title: "RESPOND Site Reports"
+title: "RESPOND Detailed Site Reports"
 output: 
     html_document:
         toc: TRUE
@@ -7,8 +7,6 @@ output:
 ---
 
 <br>
-
-# Detailed site reports
 
 ## [Los Angeles County - 80](InitalDataCleaning/Survey\ report/Scantron\ data/Cleaning\ Report\ 12072021/SurveyOnly\ cleaning\ report.Los\ Angeles\ County.80.html)
 
