@@ -1,7 +1,7 @@
 name: "RESPOND"
 output_dir: "."
 navbar:
-  title: "RESPOND Site Reports"
+  title: "RESPOND Data Visualization"
   left:
     - text: "Home"
       href: index.html
