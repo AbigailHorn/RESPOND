@@ -1,5 +1,5 @@
 ---
-title: "Option 1: Traditional Website"
+title: "RESPOND Site Reports"
 output: 
     html_document:
         toc: TRUE
@@ -8,38 +8,31 @@ output:
 
 <br>
 
-# To do if using this website
-
-* Rerender the html reports using the css style sheet in the root directory of this website so that the top banner is included and “Home” can be seen
-
-* Alternatively, rerender the html reports with an embedded link to "Home" at the top
-
-* Clean up the html reports
-  * Better titles 
-  * Remove the generic pieces (keep only pieces specific to a given site)
-  * Use `formattable` to make nicer looking tables
-  * Add some figures
-
-<br>
-
-
 # Detailed site reports
 
-## [Georgia](testing/html-test/Georgia.html)
+## [Los Angeles County - 80](InitalDataCleaning/Survey\ report/Scantron\ data/Cleaning\ Report\ 12072021/SurveyOnly\ cleaning\ report.Los\ Angeles\ County.80.html)
 
-## [Los Angeles County](testing/html-test/LAC.html)
+## [Northern CA - 30](InitalDataCleaning/Survey\ report/Scantron\ data/Cleaning\ Report\ 12072021/SurveyOnly\ cleaning\ report.Northern CA.30.html)
 
-## [Northern California](testing/html-test/NorCal.html)
+## [Greater CA - 10](InitalDataCleaning/Survey\ report/Scantron\ data/Cleaning\ Report\ 12072021/SurveyOnly\ cleaning\ report.Greater CA.10.html)
 
-## [Michigan](testing/html-test/Michigan.html)
+## [Detroit - 60](InitalDataCleaning/Survey\ report/Scantron\ data/Cleaning\ Report\ 12072021/SurveyOnly\ cleaning\ report.Detroit.60.html)
 
-## [Louisiana](testing/html-test/Louisiana.html)
+## [Louisiana - 40](InitalDataCleaning/Survey\ report/Scantron\ data/Cleaning\ Report\ 12072021/SurveyOnly\ cleaning\ report.Louisiana.40.html)
 
-<br>
+## [Georgia - 20](InitalDataCleaning/Survey\ report/Scantron\ data/Cleaning\ Report\ 12072021/SurveyOnly\ cleaning\ report.Georgia.20.html)
 
-# Some nice interactive visual
+## [Michigan - 61](InitalDataCleaning/Survey\ report/Scantron\ data/Cleaning\ Report\ 12072021/SurveyOnly\ cleaning\ report.Michigan.61.html)
 
-Add something helpful here, maybe a map of all sites?
+## [New Jersey - 50](InitalDataCleaning/Survey\ report/Scantron\ data/Cleaning\ Report\ 12072021/SurveyOnly\ cleaning\ report.New Jersey.50.html)
+
+## [Texas - 70](InitalDataCleaning/Survey\ report/Scantron\ data/Cleaning\ Report\ 12072021/SurveyOnly\ cleaning\ report.Texas.70.html)
+
+## [WebRecruit - 99](InitalDataCleaning/Survey\ report/Scantron\ data/Cleaning\ Report\ 12072021/SurveyOnly\ cleaning\ report.WebRecruit.99.html)
+
+## [USC Other - 81](InitalDataCleaning/Survey\ report/Scantron\ data/Cleaning\ Report\ 12072021/SurveyOnly\ cleaning\ report.USC Other.81.html)
+
+## [USC MEC - 82](InitalDataCleaning/Survey\ report/Scantron\ data/Cleaning\ Report\ 12072021/SurveyOnly\ cleaning\ report.USC MEC.82.html)
 
 <br>
 
@@ -53,6 +46,8 @@ library(dplyr)
 library(plotly)
 library(DT)
 library(knitr)
+library(here)
+library(fs)
 
 # Initialize code chunk options
 opts_chunk$set(

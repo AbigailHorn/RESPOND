@@ -1,0 +1,19 @@
+---
+title: "Testing fragment"
+output: 
+    html_document:
+        toc: TRUE
+        toc_float: TRUE
+---
+
+## Users: Please select a site report
+
+* Select a site from the drop-down menu
+* Use the navigation bar to find the section of the report you're interested in
+
+## Developers: Let's make the site reports look nicer
+
+* Better titles 
+* Remove the generic pieces (keep only pieces specific to a given site)
+* Use `formattable` to make nicer looking tables
+* Add some figures
