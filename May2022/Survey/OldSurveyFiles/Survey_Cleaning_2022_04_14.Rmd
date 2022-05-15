@@ -1,0 +1,144 @@
+---
+title: "Survey Cleaning"
+author: "RESPOND Core D Team"
+date: "`r format(Sys.time(), '%Y-%m-%d')`"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    df_print: paged
+    code_folding: hide
+  pdf_document: default
+
+---
+
+```{r setup, include=FALSE}
+require("RPostgreSQL") # for PostgreSQL
+library(zoo) # for date conversion
+library(expss) # for labels
+library(DBI) # for Database connectivity
+library(summarytools) # for summarizing variables
+library(gtsummary)
+library(tidyverse)
+library(plyr)
+library(dplyr)
+library(knitr) # for creating tables
+library(questionr)
+library(kableExtra)
+library(readxl)
+```
+
+```{r input survey data, include=FALSE} 
+
+setwd("/Users/yilixu/VIGILANTE/by20220401_RESPOND/")
+
+load("./_data/vsurvall20220328.Rda")
+load("./_data/vsiteid20220401.Rda")
+
+# remove spaces for now
+vsiteid <- vsiteid %>% 
+  mutate(registrywid = gsub(" ", "_", registrywid))
+
+# working data.frame, with some cleaning of IDs etc
+d <- vsurvall %>% 
+  left_join(vsiteid, c('siteid', 'registrywid')) %>% 
+  # trim whitespace from surveyid
+  mutate(surveyid = trimws(surveyid))
+
+# input the variable information including variable name (<var>), label for table of contents and headings (<title>), item description or question asked on survey (<item>), and variable values (<response>)
+variable_information <- read_xlsx("./SurveyVariablesInformationRPMOD_final20220312.xlsx")
+#variable_information <- variable_information[40:60,]  #shorter list for testing...
+variables <- variable_information$var
+
+```
+
+
+<!-- read script containing useful code -->
+```{r child = 'Survey_Cleaning_Chunks_2022_03_02.Rmd', echo = F}
+```
+
+# Description
+
+This report is step two of a three step process for data organization in the RESPOND study.
+
+The three steps include:
+
+1. Data processing: investigation and reporting  
+    + Evaluate the data received from the scantron surveys  
+    + Understand the the variables, their values, distributions, and identify potential problems  
+    + From this report we can propose potential solutions on how to handle missing or unknown data, alternative values, or duplicated or problematic records  
+2. Data cleaning  
+    + Implement solutions for data cleaning given decisions from step 1 report  
+    + Keep data in detailed format 
+    + Create composite variables  
+3. Data creation  
+    + Output data to an "analysis ready" R data set  
+    + Output data to a file that facilitates input into SAS
+
+```{r clean survey data, echo=FALSE}
+source("Survey_Cleaning_Functions_2022_04_14-Yili.R")
+
+d <- run_survey_cleaning(dat=d, variables=variables)
+
+```
+
+
+## Total number of records: `r nrow(d)`
+
+# REGISTRY	
+```{r registry }  
+registry_count <- d %>% 
+  group_by(registry) %>% 
+  dplyr::summarise(n = n())
+kable(registry_count, format = "simple", align = 'l', caption = "Overview of all registries")
+```
+
+
+# RESPOND ID
+* From Barcode label put on last page of survey by registries, identifies participant. RESPOND_ID is assigned by the registries.
+```{r respond id, echo=FALSE}
+d_respondid <- filter(d, !is.na(respondid))
+
+isDup_respondid <- duplicated(d_respondid$respondid)
+numDups_respondid <- sum(isDup_respondid)
+dups_respondid <- d_respondid[isDup_respondid, 'respondid']
+
+```
+
+    + Number of duplicates: `r numDups_respondid`
+
+    + Number of NAs: `r sum(is.na(d$respondid))`
+
+
+# SURVEY ID
+- Scantron assigned SurveyID
+```{r survey ID, echo=FALSE}
+isDup_surveyid <- duplicated(d$surveyid)
+numDups_surveyid <- sum(isDup_surveyid)
+dups_surveyid <- d[isDup_surveyid, 'surveyid']
+
+```
+
+
+    + Number of duplicates: `r numDups_surveyid`
+    + The following are duplicated IDs:
+    + `r dups_surveyid`
+
+
+    + Number of NAs: `r sum(is.na(d$surveyid))`
+
+
+```{r summary_survey_variables, results = 'asis'}
+# function to report frequency table by variable looped over sites
+tab_var <- function(dat, var, variable_information) {
+  <<freq_table>>
+}
+
+# walk over VARIABLES
+walk(variables, ~ tab_var(dat = d, var = .x, variable_information = variable_information))
+```
+
+```{r create_Rda_data, echo=FALSE}
+save(d, file = paste("./_data/vsurvall_cleaned_", format(Sys.time(), "%Y%m%d"), ".Rda", sep = ""))
+
+```

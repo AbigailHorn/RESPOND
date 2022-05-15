@@ -1,0 +1,283 @@
+---
+title: "Survey Create Variables"
+author: "RESPOND Core D Team"
+date: "`r format(Sys.time(), '%Y-%m-%d')`"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    df_print: paged
+    code_folding: hide
+
+---
+
+
+```{r setup, include=FALSE}
+require("RPostgreSQL") # for PostgreSQL
+library(zoo) # for date conversion
+library(expss) # for labels
+library(DBI) # for Database connectivity
+library(summarytools) # for summarizing variables
+library(gtsummary)
+library(tidyverse)
+library(plyr)
+library(dplyr)
+library(knitr) # for creating tables
+library(questionr)
+library(kableExtra)
+library(readxl)
+library(table1)
+
+```
+
+```{r input survey data, include=FALSE} 
+setwd("/Volumes/GoogleDrive/My Drive/Projects/RESPOND/CORE D/DataProcessingCleaningCreation/Survey")
+available_data_files <- list.files("../Data/")
+load(paste("../Data/", sort(available_data_files[grep("vsurvall_cleaned_", available_data_files)], decreasing = T)[1], sep=""))
+
+# input the variable information including variable name (<var>), label for table of contents and headings (<title>), item description or question asked on survey (<item>), and variable values (<response>)
+variable_information <- read_xlsx("Survey Data Dictionary/SurveyCreateVariablesInformation.xlsx")
+#variable_information <- variable_information  #shorter list for testing...
+variables <- variable_information$var
+
+```
+
+<!-- read script containing useful code -->
+```{r child = 'Survey_Cleaning_Chunks.Rmd', echo = F}
+```
+
+
+# Overall Report Description
+
+## Data Processing, Cleaning, and Creation Description
+```{r child="Survey_Description.Rmd" }
+```
+
+## Total number of records: `r nrow(d)`
+
+# REGISTRY	
+```{r registry }  
+registry_count <- d %>% 
+  group_by(registry) %>% 
+  dplyr::summarise(n = n())
+kable(registry_count, format = "simple", align = 'l', caption = "Overview of all registries")
+```
+
+
+# RESPOND ID
+* From Barcode label put on last page of survey by registries, identifies participant. RESPOND_ID is assigned by the registries.
+```{r respond id, echo=FALSE}
+d_respondid <- filter(d, !is.na(respondid))
+
+isDup_respondid <- duplicated(d_respondid$respondid)
+numDups_respondid <- sum(isDup_respondid)
+dups_respondid <- d_respondid[isDup_respondid, 'respondid']
+
+```
+
+    + Number of duplicates: `r numDups_respondid`
+    + The following are duplicated IDs:
+    + `r dups_respondid`
+
+    + Number of NAs: `r sum(is.na(d$respondid))`
+
+
+# SURVEY ID
+- Scantron assigned SurveyID
+```{r survey ID, echo=FALSE}
+isDup_surveyid <- duplicated(d$surveyid)
+numDups_surveyid <- sum(isDup_surveyid)
+dups_surveyid <- d[isDup_surveyid, 'surveyid']
+
+```
+
+
+    + Number of duplicates: `r numDups_surveyid`
+    + The following are duplicated IDs:
+    + `r dups_surveyid`
+
+
+    + Number of NAs: `r sum(is.na(d$surveyid))`
+
+
+```{r summary_survey_variables, results = 'asis'}
+# function to report frequency table by variable looped over sites
+tab_var <- function(dat, var, variable_information) {
+  <<freq_table>>
+}
+```
+
+# B1 Family History
+```{r create_fam_hx, results = 'asis', echo=TRUE}
+# Yes is treated as a 1 and all other values (including NAs) are 0
+FH_Sum <- ifelse(is.na(d$b1aa), 0, ifelse(d$b1aa=="Yes", 1, 0)) +
+  ifelse(is.na(d$b1ba), 0, ifelse(d$b1ba=="Yes", 1, 0)) +
+  ifelse(is.na(d$b1ca), 0, ifelse(d$b1ca=="Yes", 1, 0)) +
+  ifelse(is.na(d$b1da), 0, ifelse(d$b1da=="Yes", 1, 0)) +
+  ifelse(is.na(d$b1ea), 0, ifelse(d$b1ea=="Yes", 1, 0))
+
+FH_FirstDeg <- ifelse(is.na(d$b1aa), 0, ifelse(d$b1aa=="Yes", 1, 0)) +
+  ifelse(is.na(d$b1ba), 0, ifelse(d$b1ba=="Yes", 1, 0)) +
+  ifelse(is.na(d$b1ca), 0, ifelse(d$b1ca=="Yes", 1, 0))
+
+FH_SecDeg <- ifelse(is.na(d$b1da), 0, ifelse(d$b1da=="Yes", 1, 0)) +
+  ifelse(is.na(d$b1ea), 0, ifelse(d$b1ea=="Yes", 1, 0))
+
+FH_hx <- data.frame(FH_Sum, FH_FirstDeg, FH_SecDeg)
+FH_hx <- apply(FH_hx, 2, as.factor)
+
+d <- data.frame(d, FH_hx)
+```
+
+```{r summary_fam_hx, results = 'asis', echo=FALSE}
+walk(c("FH_Sum", "FH_FirstDeg", "FH_SecDeg"), ~ tab_var(dat = d, var = .x, variable_information = variable_information))
+
+```  
+
+
+# B2 Other Cancers
+```{r create_other_cancers, results = 'asis', echo=TRUE}
+# Yes is treated as a 1 and all other values (including NAs) are 0
+
+Breast_Sum <- ifelse(is.na(d$b2a_1), 0, ifelse(d$b2a_1=="Breast", 1, 0)) +  # Mother
+  ifelse(is.na(d$b2b_1), 0, ifelse(d$b2b_1=="Breast", 1, 0)) +  # Father
+  ifelse(is.na(d$b2c_1), 0, ifelse(d$b2c_1=="Breast", 1, 0)) +  # Sister
+  ifelse(is.na(d$b2d_1), 0, ifelse(d$b2d_1=="Breast", 1, 0)) +  # Brother
+  ifelse(is.na(d$b2e_1), 0, ifelse(d$b2e_1=="Breast", 1, 0)) +  # Daughter
+  ifelse(is.na(d$b2f_1), 0, ifelse(d$b2f_1=="Breast", 1, 0))   # Son
+Breast_Yes <- ifelse(Breast_Sum>0, "Yes", "No_NA")
+
+Ovarian_Sum <- ifelse(is.na(d$b2a_2), 0, ifelse(d$b2a_2=="Ovarian", 1, 0)) +  # Mother
+  ifelse(is.na(d$b2c_2), 0, ifelse(d$b2c_2=="Ovarian", 1, 0)) +  # Sister
+  ifelse(is.na(d$b2e_2), 0, ifelse(d$b2e_2=="Ovarian", 1, 0))  # Daughter
+Ovarian_Yes <- ifelse(Ovarian_Sum>0, "Yes", "No_NA")
+
+Colorectal_Sum <- ifelse(is.na(d$b2a_3), 0, ifelse(d$b2a_3=="Colorectal", 1, 0)) +  # Mother
+  ifelse(is.na(d$b2b_3), 0, ifelse(d$b2b_3=="Colorectal", 1, 0)) +  # Father
+  ifelse(is.na(d$b2c_3), 0, ifelse(d$b2c_3=="Colorectal", 1, 0)) +  # Sister
+  ifelse(is.na(d$b2d_3), 0, ifelse(d$b2d_3=="Colorectal", 1, 0)) +  # Brother
+  ifelse(is.na(d$b2e_3), 0, ifelse(d$b2e_3=="Colorectal", 1, 0)) +  # Daughter
+  ifelse(is.na(d$b2f_3), 0, ifelse(d$b2f_3=="Colorectal", 1, 0))   # Son
+Colorectal_Yes <- ifelse(Colorectal_Sum>0, "Yes", "No_NA")
+
+Lung_Sum <- ifelse(is.na(d$b2a_4), 0, ifelse(d$b2a_4=="Lung", 1, 0)) +  # Mother
+  ifelse(is.na(d$b2b_4), 0, ifelse(d$b2b_4=="Lung", 1, 0)) +  # Father
+  ifelse(is.na(d$b2c_4), 0, ifelse(d$b2c_4=="Lung", 1, 0)) +  # Sister
+  ifelse(is.na(d$b2d_4), 0, ifelse(d$b2d_4=="Lung", 1, 0)) +  # Brother
+  ifelse(is.na(d$b2e_4), 0, ifelse(d$b2e_4=="Lung", 1, 0)) +  # Daughter
+  ifelse(is.na(d$b2f_4), 0, ifelse(d$b2f_4=="Lung", 1, 0))   # Son
+Lung_Yes <- ifelse(Lung_Sum>0, "Yes", "No_NA")
+
+Other_Cancer_Sum <- ifelse(is.na(d$b2a_5), 0, ifelse(d$b2a_5=="Other_Cancer", 1, 0)) +  # Mother
+  ifelse(is.na(d$b2b_5), 0, ifelse(d$b2b_5=="Other_Cancer", 1, 0)) +  # Father
+  ifelse(is.na(d$b2c_5), 0, ifelse(d$b2c_5=="Other_Cancer", 1, 0)) +  # Sister
+  ifelse(is.na(d$b2d_5), 0, ifelse(d$b2d_5=="Other_Cancer", 1, 0)) +  # Brother
+  ifelse(is.na(d$b2e_5), 0, ifelse(d$b2e_5=="Other_Cancer", 1, 0)) +  # Daughter
+  ifelse(is.na(d$b2f_5), 0, ifelse(d$b2f_5=="Other_Cancer", 1, 0))   # Son
+Other_Cancer_Yes <- ifelse(Other_Cancer_Sum>0, "Yes", "No_NA")
+
+Any_Cancer_Sum <- Breast_Sum + Ovarian_Sum + Colorectal_Sum + Lung_Sum + Other_Cancer_Sum
+Any_Cancer_Yes <- ifelse(Any_Cancer_Sum>0, "Yes", "No_NA")
+
+Cancer_hx <- data.frame(Breast_Sum, Breast_Yes, Ovarian_Sum, Ovarian_Yes, Colorectal_Sum, Colorectal_Yes, Lung_Sum, Lung_Yes, Other_Cancer_Sum, Other_Cancer_Yes, Any_Cancer_Sum, Any_Cancer_Yes)
+Cancer_hx <- apply(Cancer_hx, 2, as.factor)
+
+d <- data.frame(d, Cancer_hx)
+
+```
+
+```{r summary_other_cancers, results = 'asis', echo=FALSE}
+walk(c("Breast_Sum","Breast_Yes","Ovarian_Sum","Ovarian_Yes","Colorectal_Sum","Colorectal_Yes","Lung_Sum","Lung_Yes","Other_Cancer_Sum","Other_Cancer_Yes", "Any_Cancer_Sum", "Any_Cancer_Yes"), ~ tab_var(dat = d, var = .x, variable_information = variable_information))
+
+```  
+
+
+# B4 Comorbidity
+```{r create_comorb_score, results = 'asis', echo=TRUE}
+# Yes is treated as a 1 and all other values (including NAs) are 0
+Comorbidity_Score <- ifelse(is.na(d$b4aa), 0, ifelse(d$b4aa=="Yes", 1, 0)) +  # Heart Attack
+  ifelse(is.na(d$b4ba), 0, ifelse(d$b4ba=="Yes", 1, 0)) +  # Heart Failure
+  ifelse(is.na(d$b4ca), 0, ifelse(d$b4ca=="Yes", 1, 0)) +  # Stroke
+  ifelse(is.na(d$b4da), 0, ifelse(d$b4da=="Yes", 1, 0)) +  # Hypertension
+  ifelse(is.na(d$b4ea), 0, ifelse(d$b4ea=="Yes", 1, 0)) +  # Peripheral arterial
+  ifelse(is.na(d$b4fa), 0, ifelse(d$b4fa=="Yes", 1, 0)) +  # High cholesterol
+  ifelse(is.na(d$b4ga), 0, ifelse(d$b4ga=="Yes", 1, 0)) +  # Lung
+  ifelse(is.na(d$b4ha), 0, ifelse(d$b4ha=="Yes", 1, 0)) +  # Stomach
+  ifelse(is.na(d$b4ia), 0, ifelse(d$b4ia=="Yes", 1, 0)) +  # Bowel
+  ifelse(is.na(d$b4ja), 0, ifelse(d$b4ja=="Yes", 1, 0)) +  # Diabetes
+  ifelse(is.na(d$b4ka), 0, ifelse(d$b4ka=="Yes", 1, 0)) +  # Kidney
+  ifelse(is.na(d$b4la), 0, ifelse(d$b4la=="Yes", 1, 0)) +  # Liver
+  ifelse(is.na(d$b4ma), 0, ifelse(d$b4ma=="Yes", 1, 0)) +  # Arthritis
+  ifelse(is.na(d$b4na), 0, ifelse(d$b4na=="Yes", 1, 0)) +  # Alzheimer's
+  ifelse(is.na(d$b4oa), 0, ifelse(d$b4oa=="Yes", 1, 0)) +  # Depression
+  ifelse(is.na(d$b4pa), 0, ifelse(d$b4pa=="Yes", 1, 0)) +  # AIDS
+  ifelse(is.na(d$b4qa), 0, ifelse(d$b4qa=="Yes", 1, 0))  # Other Cancers
+
+Comorbidity_Any <- ifelse(Comorbidity_Score>0, "Yes", "No_NA")
+
+d <- data.frame(d, Comorbidity_Score, Comorbidity_Any)
+
+```
+
+```{r summary_comorbidity, results = 'asis', echo=FALSE}
+walk(c("Comorbidity_Score", "Comorbidity_Any"), ~ tab_var(dat = d, var = .x, variable_information = variable_information))
+
+```  
+
+# B4 Discrimination
+```{r create_discrimination_score, results = 'asis', echo=TRUE}
+# Yes is treated as a 1 and all other values (including NAs) are 0
+Discrimination_Score <- ifelse(is.na(d$d1aa), 0, ifelse(d$d1aa=="Yes", 1, 0)) +  # Unfairly fired
+  ifelse(is.na(d$d1ba), 0, ifelse(d$d1ba=="Yes", 1, 0)) +  # Unfair reasons for not being hired
+  ifelse(is.na(d$d1ca), 0, ifelse(d$d1ca=="Yes", 1, 0)) +  # Unfair treatment by police
+  ifelse(is.na(d$d1da), 0, ifelse(d$d1da=="Yes", 1, 0)) +  # Unfairly discouraged by teacher
+  ifelse(is.na(d$d1ea), 0, ifelse(d$d1ea=="Yes", 1, 0)) +  # Unfairly prevented from neighborhood
+  ifelse(is.na(d$d1fa), 0, ifelse(d$d1fa=="Yes", 1, 0)) +  # Unfairly denied bank loan
+  ifelse(is.na(d$d1ga), 0, ifelse(d$d1ga=="Yes", 1, 0))  # Unfairly treated when getting medical care
+  
+Discrimination_Any <- ifelse(Discrimination_Score>0, "Yes", "No_NA")
+
+d <- data.frame(d, Discrimination_Score, Discrimination_Any)
+
+```
+
+```{r summary_Discrimination, results = 'asis', echo=FALSE}
+walk(c("Discrimination_Score", "Discrimination_Any"), ~ tab_var(dat = d, var = .x, variable_information = variable_information))
+
+```  
+
+
+```{r create_Rda_data, echo=FALSE}
+save(d, file=paste("../Data/vsurvall_analysis_", format(Sys.time(), "%Y%m%d"), ".Rda", sep=""))
+write.table(d, file=paste("../Data/vsurvall_analysis_", format(Sys.time(), "%Y%m%d"), ".csv", sep=""), sep=",", quote=F, row.names=F)
+
+#write.table(data.frame(FH_hx, Cancer_hx), file="Family_Cancer_hx.csv", sep=",", quote=F, row.names=F)
+
+```
+
+# Summary Tables
+```{r p_value function for tables, echo=FALSE}
+pvalue <- function(x, ...) {
+    # Construct vectors of data y, and groups (strata) g
+    y <- unlist(x)
+    g <- factor(rep(1:length(x), times=sapply(x, length)))
+    if (is.numeric(y)) {
+        # For numeric variables, perform a anova ## standard 2-sample t-test
+        p <- anova(lm(y~g))$`Pr(>F)`   # t.test(y ~ g)$p.value 
+    } else {
+        # For categorical variables, perform a chi-squared test of independence
+        p <- chisq.test(table(y, g))$p.value
+    }
+    # Format the p-value, using an HTML entity for the less-than sign.
+    # The initial empty string places the output on the line below the variable label.
+    c("", sub("<", "&lt;", format.pval(p, digits=3, eps=0.001)))
+}
+
+```
+
+
+## FH_FirstDeg by Cancers
+```{r cross_tabs, results='asis'}
+table1(~ Breast_Yes+Ovarian_Yes+Colorectal_Yes+Lung_Yes+Other_Cancer_Yes+Any_Cancer_Yes | FH_FirstDeg, extra.col=list('P-value'=pvalue), data=d, topclass="Rtable1-shade", overall=FALSE)
+
+```

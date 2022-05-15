@@ -1,0 +1,105 @@
+---
+title: "Merge Registry and JHU Data"
+author: "RESPOND Core D Team"
+date: "`r format(Sys.time(), '%Y-%m-%d')`"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    df_print: paged
+    code_folding: hide
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+require("RPostgreSQL") # for PostgreSQL
+library(zoo) # for date conversion
+library(expss) # for labels
+library(DBI) # for Database connectivity
+library(summarytools) # for summarizing variables
+library(tidyverse)
+library(plyr)
+library(knitr) # for creating tables
+#library(questionr)
+library(table1)
+library(xtable)
+library(ggplot2)
+#library(epiDisplay)
+library(memisc)
+
+knitr::opts_chunk$set(warning = FALSE)
+
+```
+
+```{r input data} 
+# set working directory
+setwd("/Volumes/GoogleDrive/My Drive/Projects/RESPOND/CORE D/DataProcessingCleaningCreation/TumorMerge/")
+available_data_files <- list.files("../Data/")
+available_database_files <- list.files("../Data/DataFromDatabase/")
+load(paste("../Data/", sort(available_data_files[grep("vsurvall_analysis_", available_data_files)], decreasing = T)[1], sep=""))
+load(paste("../Data/DataFromDatabase/", sort(available_database_files[grep("vjhusamples", available_database_files)], decreasing = T)[1], sep=""))
+load(paste("../Data/", sort(available_data_files[grep("vregall_analysis_", available_data_files)], decreasing = T)[1], sep=""))
+
+d <- merge(x=d, y=disease_characteristics, by.x="respondid", by.y="d.respondid", all.x=TRUE, all.y=TRUE)
+d <- merge(x=d, y=vjhusamples, by.x="respondid", by.y="respondid", all.x=FALSE, all.y=FALSE)
+
+
+
+```
+
+# Description
+
+This report is merges the registry data and the survey data in the RESPOND study.
+
+### Total Number of Individuals: `r nrow(d)`
+
+# REGISTRY	
+```{r registry }  
+registry_count <- d %>% 
+  group_by(registry) %>% 
+  dplyr::summarise(n = n())
+kable(registry_count, format = "simple", align = 'l', caption = "Overview of all registries")
+```
+
+
+# RESPOND ID
+* From Barcode label put on last page of survey by registries, identifies participant. RESPOND_ID is assigned by the registries.
+```{r respond id, echo=FALSE}
+d_respondid <- filter(d, !is.na(respondid))
+
+isDup_respondid <- duplicated(d_respondid$respondid)
+numDups_respondid <- sum(isDup_respondid)
+dups_respondid <- d_respondid[isDup_respondid, 'respondid']
+
+```
+
+    + Number of duplicates: `r numDups_respondid`
+    + The following are duplicated IDs:
+    + `r dups_respondid`
+
+    + Number of NAs: `r sum(is.na(d$respondid))`
+
+
+# SURVEY ID
+- Scantron assigned SurveyID
+```{r survey ID, echo=FALSE}
+isDup_surveyid <- duplicated(d$surveyid)
+numDups_surveyid <- sum(isDup_surveyid)
+dups_surveyid <- d[isDup_surveyid, 'surveyid']
+
+```
+
+
+    + Number of duplicates: `r numDups_surveyid`
+    + The following are duplicated IDs:
+    + `r dups_surveyid`
+
+
+    + Number of NAs: `r sum(is.na(d$surveyid))`
+
+
+```{r create_Rda_data, echo=FALSE}
+save(d, file=paste("../Data/vjhu_", format(Sys.time(), "%Y%m%d"), ".Rda", sep=""))
+write.table(d, file=paste("../Data/vjhu_", format(Sys.time(), "%Y%m%d"), ".csv", sep=""), sep=",", quote=F, row.names=F)
+```
+

@@ -6,10 +6,15 @@ library(pivottabler)
 library(fs)
 library(here)
 
+# Weija data
+# load(path(here::here("InitalDataCleaning/Data/Clean Data/Clean_Scantron20211122.rda")))
+
+# Summary table output
+# d %>% select(clinical_stage_category, d2a) %>% gtsummary::tbl_summary(by=d2a,  percent = "row")
+
 # rsconnect::setAccountInfo(name='abigail-horn', token='31B8FC87628C3F8CDE3B886D5C085ED1', secret='1mfe25nVyMDUU8NmRD7SZWqCRAWvDrJ0wcE2r+3u')
 # library(rsconnect)
 # rsconnect::deployApp('testing/pivot-deploy2')
-
 
 # load(path(here::here("InitalDataCleaning/Data/Clean Data/Shiny_Merge_2021_12_09.rda")))
 # d.relevel <- d %>% dplyr::mutate(
@@ -21,13 +26,6 @@ library(here)
 # # save(d.relevel, file ="testing/pivot-deploy2/Shiny_Merge_2021_12_09_relevel.rda")
 
 load("Shiny_Merge_2021_12_09_relevel.rda")
-
-# Weija data
-# load(path(here::here("InitalDataCleaning/Data/Clean Data/Clean_Scantron20211122.rda")))
-
-# Summary table output
-# d %>% select(clinical_stage_category, d2a) %>% gtsummary::tbl_summary(by=d2a,  percent = "row")
-
 
 ui <- fluidPage(
   

@@ -1,0 +1,54 @@
+---
+title: "Registry Chunks"
+
+---
+
+```{r freq_table, results = 'asis', eval = F}
+
+# header
+cat(paste0("# ", variable_information$var[match(var, variable_information$var)]), collapse = '\n')
+cat(paste0("-  ", variable_information$naaccrLink[match(var, variable_information$var)]), collapse = '\n')
+cat('\n')
+cat(paste0("## ", var, " {.tabset}"), collapse = '\n')
+
+# create vector of unique sites 
+sites <- c("", unique(dat[ , 'registry']))
+
+# define function to apply over registry
+run_site <- function(dat = dat, site, var = var) {
+  <<freq_table_site_loop>>
+}
+
+# walk over SITES
+walk(sites, ~ run_site(dat = dat, site = .x, var = var))
+```
+
+
+```{r freq_table_site_loop, results = 'asis', eval = F}
+
+# helped chunk to loop freq tables over registry (sites)
+
+# create markdown header
+if(site == "") {
+  cat(paste0("### All"), collapse = '\n')
+} else {
+  cat(paste0("### ", site), collapse = '\n')
+}
+
+# call questionr::freq
+result <- questionr::freq(dat %>%
+                            filter(grepl(site, registry)) %>% 
+                            pull(get(var)), total = TRUE)
+
+# format output for rmarkdown chunk
+max_rows_report <- 20 # maximum number of rows to output in the kable table
+total_unique_values <- nrow(result)-1 # number of unique values for the variable
+cat(paste0("Total Unique Values: ", total_unique_values), collapse = '\n')
+cat('\n')
+cat(paste0("Reporting ", min(total_unique_values,max_rows_report), " values"), collapse = '\n')
+cat('\n')
+cat(kable(head(result, n=min(total_unique_values,max_rows_report))) %>% 
+      kable_styling('bordered', bootstrap_options = c("striped", "hover", "condensed"), full_width = F, position = 'center'), '\n\n')
+
+```
+

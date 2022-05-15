@@ -1,0 +1,257 @@
+---
+title: "Summary Report for the Merged Registry and Survey Data"
+author: "RESPOND Core D Team"
+date: "`r format(Sys.time(), '%Y-%m-%d')`"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    df_print: paged
+    code_folding: hide
+  pdf_document: default
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+require("RPostgreSQL") # for PostgreSQL
+library(zoo) # for date conversion
+library(expss) # for labels
+library(DBI) # for Database connectivity
+library(summarytools) # for summarizing variables
+library(tidyverse)
+library(plyr)
+library(knitr) # for creating tables
+#library(questionr)
+library(table1)
+library(xtable)
+library(ggplot2)
+#library(epiDisplay)
+library(memisc)
+
+knitr::opts_chunk$set(warning = FALSE)
+
+```
+
+```{r input data} 
+# set working directory
+setwd("/Volumes/GoogleDrive/My Drive/Projects/RESPOND/CORE D/DataProcessingCleaningCreation/MergeData")
+available_data_files <- list.files("../Data/")
+load(paste("../Data/", sort(available_data_files[grep("vmerged_", available_data_files)], decreasing = T)[1], sep=""))
+
+```
+
+# Description
+
+This report is merges the registry data and the survey data in the RESPOND study.
+
+### Total Number of Individuals: `r nrow(d)`
+
+# REGISTRY	
+```{r registry }  
+registry_count <- d %>% 
+  group_by(registry) %>% 
+  dplyr::summarise(n = n())
+kable(registry_count, format = "simple", align = 'l', caption = "Overview of all registries")
+```
+
+
+# RESPOND ID
+* From Barcode label put on last page of survey by registries, identifies participant. RESPOND_ID is assigned by the registries.
+```{r respond id, echo=FALSE}
+d_respondid <- filter(d, !is.na(respondid))
+
+isDup_respondid <- duplicated(d_respondid$respondid)
+numDups_respondid <- sum(isDup_respondid)
+dups_respondid <- d_respondid[isDup_respondid, 'respondid']
+
+```
+
+    + Number of duplicates: `r numDups_respondid`
+
+    + Number of NAs: `r sum(is.na(d$respondid))`
+
+
+# SURVEY ID
+- Scantron assigned SurveyID
+```{r survey ID, echo=FALSE}
+isDup_surveyid <- duplicated(d$surveyid)
+numDups_surveyid <- sum(isDup_surveyid)
+dups_surveyid <- d[isDup_surveyid, 'surveyid']
+
+```
+
+
+    + Number of duplicates: `r numDups_surveyid`
+    + The following are duplicated IDs:
+    + `r dups_surveyid`
+
+
+    + Number of NAs: `r sum(is.na(d$surveyid))`
+
+
+# Summary Tables
+
+```{r p_value function for tables, echo=FALSE}
+pvalue <- function(x, ...) {
+    # Construct vectors of data y, and groups (strata) g
+    y <- unlist(x)
+    g <- factor(rep(1:length(x), times=sapply(x, length)))
+    if (is.numeric(y)) {
+        # For numeric variables, perform a anova ## standard 2-sample t-test
+        p <- anova(lm(y~g))$`Pr(>F)`   # t.test(y ~ g)$p.value  
+    } else {
+        # For categorical variables, perform a chi-squared test of independence
+        p <- chisq.test(table(y, g))$p.value
+    }
+    # Format the p-value, using an HTML entity for the less-than sign.
+    # The initial empty string places the output on the line below the variable label.
+    c("", sub("<", "&lt;", format.pval(p, digits=3, eps=0.001)))
+}
+
+```
+
+
+## Aggressiveness ('grant') 
+### By Cancer History
+```{r agg_grant by cancers, results='asis'}
+table1(~ Breast_Yes+Ovarian_Yes+Colorectal_Yes+Lung_Yes+Other_Cancer_Yes+Any_Cancer_Yes | aggressiveness_grant, extra.col=list('P-value'=pvalue), data=d, topclass="Rtable1-shade", overall=FALSE)
+
+```
+
+### By Comorbidities
+```{r agg_grant by comorbidities, results='asis'}
+
+table1::label(d$b4aa) <- "Heart_Attack"
+table1::label(d$b4ba) <- "Heart_Failure"
+table1::label(d$b4ca) <- "Stroke"
+table1::label(d$b4da) <- "Hypertension"
+table1::label(d$b4ea) <- "Peripheral_arterial"
+table1::label(d$b4fa) <- "High_cholesterol"
+table1::label(d$b4ga) <- "Lung"
+table1::label(d$b4ha) <- "Stomach"
+table1::label(d$b4ia) <- "Bowel"
+table1::label(d$b4ja) <- "Diabetes"
+table1::label(d$b4ka) <- "Kidney"
+table1::label(d$b4la) <- "Liver"
+table1::label(d$b4ma) <- "Arthritis"
+table1::label(d$b4na) <- "Alzheimers"
+table1::label(d$b4oa) <- "Depression"
+table1::label(d$b4pa) <- "AIDS"
+table1::label(d$b4qa) <- "Other_Cancers"
+table1(~ b4aa+b4ba+b4ca+b4da+b4ea+b4fa+b4ga+b4ha+b4ia+b4ja+b4ka+b4la+b4ma+b4na+b4oa+b4pa+b4qa | aggressiveness_grant, extra.col=list('P-value'=pvalue),
+       data=d, topclass="Rtable1-shade", overall=FALSE)
+
+table1(~ Comorbidity_Score + Comorbidity_Any | aggressiveness_grant, extra.col=list('P-value'=pvalue),
+       data=d, topclass="Rtable1-shade", overall=FALSE)
+
+```
+
+### By Lifestyle Factors
+```{r agg_grant by lifestyle factors, results='asis'}
+
+table1::label(d$f3) <- "Excercise_days_per_week"
+table1::label(d$f4) <- "Excercise_amount"
+table1::label(d$f5) <- "Drinking_per_week"
+table1::label(d$f6) <- "Drinking_amount"
+table1::label(d$f7) <- "Smoking"
+table1::label(d$f7a) <- "Smoking_amount"
+table1(~ f3+f4+f5+f6+f7+f7a | aggressiveness_grant, extra.col=list('P-value'=pvalue),
+       data=d, topclass="Rtable1-shade", overall=FALSE)
+
+```
+
+
+## Aggressiveness ('Epi')
+### By Cancer History
+```{r agg_epi by cancers, results='asis'}
+table1(~ Breast_Yes+Ovarian_Yes+Colorectal_Yes+Lung_Yes+Other_Cancer_Yes+Any_Cancer_Yes | aggressiveness_epi, extra.col=list('P-value'=pvalue), data=d, topclass="Rtable1-shade", overall=FALSE)
+
+```
+
+### By Comorbidities
+```{r agg_Epi by comoridities, results='asis'}
+
+table1::label(d$b4aa) <- "Heart_Attack"
+table1::label(d$b4ba) <- "Heart_Failure"
+table1::label(d$b4ca) <- "Stroke"
+table1::label(d$b4da) <- "Hypertension"
+table1::label(d$b4ea) <- "Peripheral_arterial"
+table1::label(d$b4fa) <- "High_cholesterol"
+table1::label(d$b4ga) <- "Lung"
+table1::label(d$b4ha) <- "Stomach"
+table1::label(d$b4ia) <- "Bowel"
+table1::label(d$b4ja) <- "Diabetes"
+table1::label(d$b4ka) <- "Kidney"
+table1::label(d$b4la) <- "Liver"
+table1::label(d$b4ma) <- "Arthritis"
+table1::label(d$b4na) <- "Alzheimers"
+table1::label(d$b4oa) <- "Depression"
+table1::label(d$b4pa) <- "AIDS"
+table1::label(d$b4qa) <- "Other_Cancers"
+table1(~ b4aa+b4ba+b4ca+b4da+b4ea+b4fa+b4ga+b4ha+b4ia+b4ja+b4ka+b4la+b4ma+b4na+b4oa+b4pa+b4qa | aggressiveness_epi, extra.col=list('P-value'=pvalue),
+       data=d, topclass="Rtable1-shade", overall=FALSE)
+
+```
+
+### By Lifestyle Factors
+```{r agg_epi by lifestyle factors, results='asis'}
+
+table1::label(d$f3) <- "Excercise_days_per_week"
+table1::label(d$f4) <- "Excercise_amount"
+table1::label(d$f5) <- "Drinking_per_week"
+table1::label(d$f6) <- "Drinking_amount"
+table1::label(d$f7) <- "Smoking"
+table1::label(d$f7a) <- "Smoking_amount"
+table1(~ f3+f4+f5+f6+f7+f7a | aggressiveness_epi, extra.col=list('P-value'=pvalue),
+       data=d, topclass="Rtable1-shade", overall=FALSE)
+
+```
+
+
+## Aggressiveness ("D'Amico")
+### By Cancer History
+```{r agg_D_Amico by cancers, results='asis'}
+table1(~ Breast_Yes+Ovarian_Yes+Colorectal_Yes+Lung_Yes+Other_Cancer_Yes+Any_Cancer_Yes | D_Amico_risk_groups, extra.col=list('P-value'=pvalue), data=d, topclass="Rtable1-shade", overall=FALSE)
+
+```
+
+### By Comorbidities
+```{r agg_D_Amico by comoridities, results='asis'}
+
+table1::label(d$b4aa) <- "Heart_Attack"
+table1::label(d$b4ba) <- "Heart_Failure"
+table1::label(d$b4ca) <- "Stroke"
+table1::label(d$b4da) <- "Hypertension"
+table1::label(d$b4ea) <- "Peripheral_arterial"
+table1::label(d$b4fa) <- "High_cholesterol"
+table1::label(d$b4ga) <- "Lung"
+table1::label(d$b4ha) <- "Stomach"
+table1::label(d$b4ia) <- "Bowel"
+table1::label(d$b4ja) <- "Diabetes"
+table1::label(d$b4ka) <- "Kidney"
+table1::label(d$b4la) <- "Liver"
+table1::label(d$b4ma) <- "Arthritis"
+table1::label(d$b4na) <- "Alzheimers"
+table1::label(d$b4oa) <- "Depression"
+table1::label(d$b4pa) <- "AIDS"
+table1::label(d$b4qa) <- "Other_Cancers"
+table1(~ b4aa+b4ba+b4ca+b4da+b4ea+b4fa+b4ga+b4ha+b4ia+b4ja+b4ka+b4la+b4ma+b4na+b4oa+b4pa+b4qa | D_Amico_risk_groups, extra.col=list('P-value'=pvalue),
+       data=d, topclass="Rtable1-shade", overall=FALSE)
+
+```
+
+### By Lifestyle Factors
+```{r agg_D_Amico by lifestyle factors, results='asis'}
+
+table1::label(d$f3) <- "Excercise_days_per_week"
+table1::label(d$f4) <- "Excercise_amount"
+table1::label(d$f5) <- "Drinking_per_week"
+table1::label(d$f6) <- "Drinking_amount"
+table1::label(d$f7) <- "Smoking"
+table1::label(d$f7a) <- "Smoking_amount"
+table1(~ f3+f4+f5+f6+f7+f7a | D_Amico_risk_groups, extra.col=list('P-value'=pvalue),
+       data=d, topclass="Rtable1-shade", overall=FALSE)
+
+```
+

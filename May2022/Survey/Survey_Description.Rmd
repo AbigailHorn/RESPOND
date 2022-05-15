@@ -1,0 +1,18 @@
+---
+title: "Survey Description"
+---
+
+The three steps include:
+
+1. Data processing: investigation and reporting  
+    + Evaluate the data received from the scantron surveys  
+    + Understand the the variables, their values, distributions, and identify potential problems  
+    + From this report we can propose potential solutions on how to handle missing or unknown data, alternative values, or duplicated or problematic records  
+2. Data cleaning  
+    + Implement solutions for data cleaning given decisions from step 1 report  
+    + Keep data in detailed format 
+    + Create composite variables  
+3. Data creation  
+    + Output data to an "analysis ready" R data set  
+    + Output data to a file that facilitates input into SAS
+

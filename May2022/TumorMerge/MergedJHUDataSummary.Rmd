@@ -1,0 +1,169 @@
+---
+title: "Summary Report for the Merged Registry and JHU Data"
+author: "RESPOND Core D Team"
+date: "`r format(Sys.time(), '%Y-%m-%d')`"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    df_print: paged
+    code_folding: hide
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+require("RPostgreSQL") # for PostgreSQL
+library(zoo) # for date conversion
+library(expss) # for labels
+library(DBI) # for Database connectivity
+library(summarytools) # for summarizing variables
+library(tidyverse)
+library(plyr)
+library(knitr) # for creating tables
+#library(questionr)
+library(table1)
+library(xtable)
+library(ggplot2)
+#library(epiDisplay)
+library(memisc)
+
+knitr::opts_chunk$set(warning = FALSE)
+
+```
+
+```{r input data} 
+# set working directory
+setwd("/Volumes/GoogleDrive/My Drive/Projects/RESPOND/CORE D/DataProcessingCleaningCreation/TumorMerge/")
+available_data_files <- list.files("../Data/")
+load(paste("../Data/", sort(available_data_files[grep("vjhu_", available_data_files)], decreasing = T)[1], sep=""))
+
+```
+
+# Description
+
+This report is merges the registry data and the survey data in the RESPOND study.
+
+### Total Number of Individuals: `r nrow(d)`
+
+# REGISTRY	
+```{r registry }  
+registry_count <- d %>% 
+  group_by(registry) %>% 
+  dplyr::summarise(n = n())
+kable(registry_count, format = "simple", align = 'l', caption = "Overview of all registries")
+```
+
+
+# RESPOND ID
+* From Barcode label put on last page of survey by registries, identifies participant. RESPOND_ID is assigned by the registries.
+```{r respond id, echo=FALSE}
+d_respondid <- filter(d, !is.na(respondid))
+
+isDup_respondid <- duplicated(d_respondid$respondid)
+numDups_respondid <- sum(isDup_respondid)
+dups_respondid <- d_respondid[isDup_respondid, 'respondid']
+
+```
+
+    + Number of duplicates: `r numDups_respondid`
+
+    + Number of NAs: `r sum(is.na(d$respondid))`
+
+
+# SURVEY ID
+- Scantron assigned SurveyID
+```{r survey ID, echo=FALSE}
+isDup_surveyid <- duplicated(d$surveyid)
+numDups_surveyid <- sum(isDup_surveyid)
+dups_surveyid <- d[isDup_surveyid, 'surveyid']
+
+```
+
+
+    + Number of duplicates: `r numDups_surveyid`
+    + The following are duplicated IDs:
+    + `r dups_surveyid`
+
+
+    + Number of NAs: `r sum(is.na(d$surveyid))`
+
+
+# Summary Tables
+
+```{r p_value function for tables, echo=FALSE}
+pvalue <- function(x, ...) {
+    # Construct vectors of data y, and groups (strata) g
+    y <- unlist(x)
+    g <- factor(rep(1:length(x), times=sapply(x, length)))
+    if (is.numeric(y)) {
+        # For numeric variables, perform a anova ## standard 2-sample t-test
+        p <- anova(lm(y~g))$`Pr(>F)`   # t.test(y ~ g)$p.value  
+    } else {
+        # For categorical variables, perform a chi-squared test of independence
+        p <- chisq.test(table(y, g))$p.value
+    }
+    # Format the p-value, using an HTML entity for the less-than sign.
+    # The initial empty string places the output on the line below the variable label.
+    c("", sub("<", "&lt;", format.pval(p, digits=3, eps=0.001)))
+}
+
+```
+
+
+## Aggressiveness ('grant') 
+### By Tumor Variables
+```{r agg_grant by tumor variables, results='asis'}
+table1(~ vogleasprim+vogradegroup+vopathstage+vogleassec+vogleaster+vogradegroup+vopathstage | aggressiveness_grant, extra.col=list('P-value'=pvalue), data=d, topclass="Rtable1-shade", overall=FALSE)
+
+```
+
+
+## stage_clinical Registry 
+### By Tumor  Variables
+```{r stage_clinical by tumor variables, results='asis'}
+table1(~ vogleasprim+vogradegroup+vopathstage+vogleassec+vogleaster+vogradegroup+vopathstage | stage_clinical, extra.col=list('P-value'=pvalue), data=d, topclass="Rtable1-shade", overall=FALSE)
+
+```
+
+## Gleason_biopsy Registry 
+### By Tumor  Variables
+```{r Gleason_biopsy by tumor variables, results='asis'}
+table1(~ vogleasprim+vogradegroup+vopathstage+vogleassec+vogleaster+vogradegroup+vopathstage | Gleason_biopsy, extra.col=list('P-value'=pvalue), data=d, topclass="Rtable1-shade", overall=FALSE)
+
+```
+
+## Gleason_path Registry 
+### By Tumor  Variables
+```{r Gleason_path by tumor variables, results='asis'}
+table1(~ vogleasprim+vogradegroup+vopathstage+vogleassec+vogleaster+vogradegroup+vopathstage | Gleason_path, extra.col=list('P-value'=pvalue), data=d, topclass="Rtable1-shade", overall=FALSE)
+
+```
+
+## Gleason_pattern_clinical Registry 
+### By Tumor  Variables
+```{r Gleason_pattern_clinical by tumor variables, results='asis'}
+table1(~ vogleasprim+vogradegroup+vopathstage+vogleassec+vogleaster+vogradegroup+vopathstage | Gleason_pattern_clinical, extra.col=list('P-value'=pvalue), data=d, topclass="Rtable1-shade", overall=FALSE)
+
+```
+
+## Gleason_pattern_pathology Registry 
+### By Tumor  Variables
+```{r Gleason_pattern_pathology by tumor variables, results='asis'}
+table1(~ vogleasprim+vogradegroup+vopathstage+vogleassec+vogleaster+vogradegroup+vopathstage | Gleason_pattern_pathology, extra.col=list('P-value'=pvalue), data=d, topclass="Rtable1-shade", overall=FALSE)
+
+```
+
+## metastasis Registry 
+### By Tumor  Variables
+```{r metastasis by tumor variables, results='asis'}
+table1(~ vogleasprim+vogradegroup+vopathstage+vogleassec+vogleaster+vogradegroup+vopathstage | metastasis, extra.col=list('P-value'=pvalue), data=d, topclass="Rtable1-shade", overall=FALSE)
+
+```
+
+## summarystage Registry 
+### By Tumor  Variables
+```{r summarystage by tumor variables, results='asis'}
+table1(~ vogleasprim+vogradegroup+vopathstage+vogleassec+vogleaster+vogradegroup+vopathstage | summarystage, extra.col=list('P-value'=pvalue), data=d, topclass="Rtable1-shade", overall=FALSE)
+
+```
+

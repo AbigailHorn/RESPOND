@@ -1,0 +1,897 @@
+---
+title: "Registry Cleaning and Creation Report"
+author: "RESPOND Core D Team"
+date: "`r format(Sys.time(), '%Y-%m-%d')`"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    df_print: paged
+    code_folding: hide
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+require("RPostgreSQL") # for PostgreSQL
+library(zoo) # for date conversion
+library(expss) # for labels
+library(DBI) # for Database connectivity
+library(summarytools) # for summarizing variables
+library(tidyverse)
+library(plyr)
+library(knitr) # for creating tables
+#library(questionr)
+library(table1)
+library(xtable)
+library(ggplot2)
+#library(epiDisplay)
+library(memisc)
+
+knitr::opts_chunk$set(warning = FALSE)
+
+```
+
+```{r input data} 
+# set working directory
+setwd("/Volumes/GoogleDrive/My Drive/Projects/RESPOND/CORE D/DataProcessingCleaningCreation/Registry/")
+available_data_files <- list.files("../Data/DataFromDatabase/")
+load(paste("../Data/DataFromDatabase/", available_data_files[grep("vregall", available_data_files)], sep=""))
+load(paste("../Data/DataFromDatabase/", available_data_files[grep("vsiteid", available_data_files)], sep=""))
+
+# remove spaces for now
+vsiteid <- vsiteid %>%
+  mutate(registrywid = gsub(" ", "_", registrywid))
+
+# working data.frame, with some cleaning of IDs etc
+d <- vregall %>%
+  left_join(vsiteid, 'siteid')
+
+```
+
+```{css, echo = FALSE}
+caption {
+      color: Black;
+      font-weight: bold;
+      font-size: 1.5em;
+      text-align: center
+    }
+```
+
+# Description
+
+This report is step two and three of a three step process for registry data organization in the RESPOND study.
+
+## Data Processing, Cleaning, and Creation Description
+```{r child="Registry_Description.Rmd" }
+```
+
+
+### Total Number of Individuals: `r nrow(d)`
+
+# Disease Characteristic Variables
+
+## Date of Diagnosis
+```{r data of diagnosis, results='asis', message=FALSE}
+  dateofdiagnosis <- trimws(d[,"dateofdiagnosis"])
+  #new.d.n <- data.frame(new.d.n, dateofdiagnosis) # keep NAACCR coding
+  
+  select99Blank <- ifelse(is.na(dateofdiagnosis), F, substr(dateofdiagnosis, start=5, stop=6)=="99")
+  dateofdiagnosis[select99Blank] <- substr(dateofdiagnosis[select99Blank], start=1, stop=4)
+  
+  select99 <- ifelse(is.na(dateofdiagnosis), F, substr(dateofdiagnosis, start=7, stop=8)=="99")
+  dateofdiagnosis[select99] <- substr(dateofdiagnosis[select99], start=1, stop=6)
+  
+  select6 <- ifelse(is.na(dateofdiagnosis), F, nchar(trimws(dateofdiagnosis))==6)
+  dateofdiagnosis[select6] <- paste(dateofdiagnosis[select6], "15", sep="")
+  
+  select5 <- ifelse(is.na(dateofdiagnosis), F, nchar(trimws(dateofdiagnosis))==5)
+  tmp.year <- substr(dateofdiagnosis[select5], start=1, stop=4)
+  tmp.month <- substr(dateofdiagnosis[select5], start=5, stop=5)
+  dateofdiagnosis[select5] <- paste(tmp.year, "0", tmp.month, "15", sep="")
+  
+  select4 <- ifelse(is.na(dateofdiagnosis), F, nchar(trimws(dateofdiagnosis))==4)
+  dateofdiagnosis[select4] <- paste(dateofdiagnosis[select4], "0615", sep="")
+  
+  dateofdiagnosis <- as.Date(dateofdiagnosis, c("%Y%m%d"))
+  yearDx <- format(dateofdiagnosis, "%Y")
+
+summarytools::view(dfSummary(dateofdiagnosis, style = 'grid', max.distinct.values = 10, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+ 
+summarytools::view(dfSummary(yearDx, style = 'grid', max.distinct.values = 30, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+```
+
+
+## PSA level
+### CS SITE-SPECIFIC FACTOR 1 and psaLabValue
+**For 2015:**
+csSiteSpecificFactor1 categorize as:
+
+- less than 10ng/ml: “001”-“099”
+- 10-20 ng/ml: “100”- “200”
+- greater than 20 ng/ml: “201”-“980”
+- Unknown/not done/result not available: “000”, “981”-“990”, “997”-“999”
+
+
+**For 2016-2017:**
+csSiteSpecificFactor1 categorize as:
+
+- less than 10ng/ml:
+- 10-20 ng/ml: “100”- “200”
+- greater than 20 ng/ml: “201”-“980”
+- Unknown/not done/result not available: “000”, “981”-“990”, “997”-“999”
+
+**For 2018:**
+psaLabValue categorize as:
+
+- less than 10ng/ml: 0.1-9.9
+- 10-20 ng/ml: 10.0-20.0
+- greater than 20 ng/ml: 20.1-999.9, “XXX.1”
+- Unknown/not done/result not available: “XXX.7”, “XXX.9”
+
+### PSA Categories:
+
+- Low risk 
+  + PSA < 10
+
+- Intermediate risk 
+  + 10 < PSA < 20
+
+- High risk 
+  + PSA >= 20
+  
+```{r psa, message=FALSE, results='asis',warning=FALSE}
+st_css() #IMPORTANT!
+  cssitespecificfactor1 <- trimws(d[,"cssitespecificfactor1"])
+  cssitespecificfactor1 <- sub("^0+", "0.", cssitespecificfactor1) #making leading zeros a decimal
+  cssitespecificfactor1[which(cssitespecificfactor1=="997")]<-NA
+  cssitespecificfactor1[which(cssitespecificfactor1=="998")]<-NA
+  cssitespecificfactor1[which(cssitespecificfactor1=="999")]<-NA
+  cssitespecificfactor1 <-as.numeric(cssitespecificfactor1)
+  cssitespecificfactor1 <-cssitespecificfactor1/10
+  
+  psalabvalue <- trimws(d[,"psalabvalue"])
+  psalabvalue[which(psalabvalue=="XXX.1")]<-NA # should this be given the max value?
+  psalabvalue[which(psalabvalue=="XXX.7")]<-NA
+  psalabvalue[which(psalabvalue=="XXX.9")]<-NA
+  psalabvalue <-as.numeric(psalabvalue)
+  
+  psa <- ifelse(is.na(cssitespecificfactor1), psalabvalue, cssitespecificfactor1)
+
+  #psa <- cssitespecificfactor1  # use first cssitespecificfactor1 
+  #psa[is.na(psa)] <- psalabvalue[is.na(psa)] # then psalabvalue
+
+  psa_category <- as.factor(ifelse(is.na(psa), NA, 
+                       ifelse(psa < 10, "low", 
+                              ifelse(psa > 20, "high", "med"))))
+  psa_category <- factor(psa_category, levels=c("low", "med", "high"))
+  
+  summarytools::view(dfSummary(psa, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE ), method = "render")
+  
+  summarytools::view(dfSummary(psa_category, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE ), method = "render")
+
+  
+```
+
+
+## Clinical stage
+### TNM CLIN T and csExtension and eodPrimaryTumor
+**For 2015:**
+csExtension categorize as:
+
+- less than or equal <=T2a: “100”- “150”, “210”
+- T2b-T2c, T2NOS: “200”, “220”-“240”, “300”
+- T3-T4: “410”- “750”
+- Unknown/no evidence of primary tumor: “000”, “950”, “999” 
+
+**For 2016-2017:**
+tnmClinT categorize as:
+
+- less than or equal <=T2a: “c1”, “c1A”, “c1B”, “c1C”, “c2A”, “p2A”
+- T2b-T2c, T2NOS: “c2”, “c2B”, “c2C”, “p2”, “p2B”, “p2C”
+- T3-T4 (based on 1st 2 chars): “c3”, “c4”, “p3”, “p4”
+- Unknown/no evidence of primary tumor: “cX”, “c0”, “88”, “ “
+
+**For 2018:**
+eodPrimaryTumor categorize as:
+
+- less than or equal <=T2a: “100”- “200”
+- T2b-T2c, T2NOS: “210”, “220”, “250”, “300”
+- T3-T4: “350”- “700”
+- Unknown/no evidence of primary tumor: “000”,  “800”, “999”
+
+### Clinical Stage Categories:
+
+- Low risk 
+  + Clinical Stage <= T2a
+- Intermediate risk 
+  + Clinical Stage = T2b/T2c
+- High risk 
+  + Clinical Stage > T2c
+  
+```{r clinical stage, message=FALSE, results='asis',warning=FALSE}
+# clean tnmclint - remove the first character "c"
+  tnmclint <- trimws(d[,"tnmclint"])
+  tnmclint <- sub("^c+", "", tnmclint) # remove leading "c" values 
+  tnmclint[which(tnmclint=="X")]<-NA
+
+  csextension <- trimws(d[,"csextension"])
+   
+  csextension[which(csextension=="100")]<-"lteq_2A"
+  csextension[which(csextension=="130")]<-"lteq_2A"
+  csextension[which(csextension=="140")]<-"lteq_2A"
+  csextension[which(csextension=="150")]<-"lteq_2A"
+  csextension[which(csextension=="160")]<-"lteq_2A"
+  csextension[which(csextension=="210")]<-"lteq_2A"
+  
+  csextension[which(csextension=="200")]<-"2B_C"
+  csextension[which(csextension=="220")]<-"2B_C"
+  csextension[which(csextension=="230")]<-"2B_C"
+  csextension[which(csextension=="240")]<-"2B_C"
+  csextension[which(csextension=="300")]<-"2B_C"
+  
+  csextension[which(csextension=="350")]<-"3_4"
+  
+  csextension[which(csextension=="410")]<-"3_4"
+  csextension[which(csextension=="420")]<-"3_4"
+  csextension[which(csextension=="430")]<-"3_4"
+  csextension[which(csextension=="440")]<-"3_4"
+  csextension[which(csextension=="445")]<-"3_4"
+  csextension[which(csextension=="450")]<-"3_4"
+  csextension[which(csextension=="470")]<-"3_4"
+  csextension[which(csextension=="490")]<-"3_4"
+  csextension[which(csextension=="500")]<-"3_4"
+  csextension[which(csextension=="520")]<-"3_4"
+  csextension[which(csextension=="600")]<-"3_4"
+  csextension[which(csextension=="700")]<-"3_4"
+  csextension[which(csextension=="750")]<-"3_4"
+  
+  csextension[which(csextension=="0")]<-NA
+  csextension[which(csextension=="950")]<-NA
+  csextension[which(csextension=="999")]<-NA
+  #csextension <- as.factor(csextension)
+  
+  eodprimarytumor <- trimws(d[,"eodprimarytumor"])
+  eodprimarytumor[which(eodprimarytumor=="100")]<-"lteq_2A"
+  eodprimarytumor[which(eodprimarytumor=="110")]<-"lteq_2A"
+  eodprimarytumor[which(eodprimarytumor=="120")]<-"lteq_2A"
+  eodprimarytumor[which(eodprimarytumor=="150")]<-"lteq_2A"
+  eodprimarytumor[which(eodprimarytumor=="200")]<-"lteq_2A"
+  
+  eodprimarytumor[which(eodprimarytumor=="210")]<-"2B_C"
+  eodprimarytumor[which(eodprimarytumor=="220")]<-"2B_C"
+  eodprimarytumor[which(eodprimarytumor=="250")]<-"2B_C"
+  eodprimarytumor[which(eodprimarytumor=="300")]<-"2B_C"
+  
+  eodprimarytumor[which(eodprimarytumor=="350")]<-"3_4"
+  eodprimarytumor[which(eodprimarytumor=="400")]<-"3_4"
+  eodprimarytumor[which(eodprimarytumor=="500")]<-"3_4"
+  eodprimarytumor[which(eodprimarytumor=="600")]<-"3_4"
+  eodprimarytumor[which(eodprimarytumor=="700")]<-"3_4"
+  eodprimarytumor[which(eodprimarytumor=="000")]<-NA
+  eodprimarytumor[which(eodprimarytumor=="800")]<-NA
+  eodprimarytumor[which(eodprimarytumor=="999")]<-NA
+  
+  stage_clinical <- tnmclint  # use first tnmclint as this has the most resolution
+  stage_clinical[is.na(stage_clinical)] <- csextension[is.na(stage_clinical)] # then csextension
+  stage_clinical[is.na(stage_clinical)] <- eodprimarytumor[is.na(stage_clinical)] # for 2018
+  
+  stage_clinical <- as.factor(stage_clinical)
+  stage_clinical <- factor(stage_clinical, levels=c("lteq_2A", "2B_C", "3_4"))
+  
+  stage_clinical_category <- as.factor(unlist(lapply(as.character(stage_clinical), FUN=function(stage) { switch(stage,
+                                    "0"="low",
+                                    "1"="low",
+                                    "1A"="low",
+                                    "1B"="low",
+                                    "1C"="low",
+                                    "2"="low",
+                                    "2A"="low",
+                                    "lteq_2A"="low",
+                                    "2B"="med",
+                                    "2B_C"="med",
+                                    "2C"="med",
+                                    "3"="high",
+                                    "3_4"="high",
+                                    "3A"="high",
+                                    "3B"="high",
+                                    "4"="high",
+                                    `NA`=NA)})))
+  stage_clinical_category <- factor(stage_clinical_category, levels=c("low", "med", "high"))
+  
+  summarytools::view(dfSummary(stage_clinical, style = 'grid', max.distinct.values = 100, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE), method = "render")
+  
+  summarytools::view(dfSummary(stage_clinical_category, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE ), method = "render")
+
+```
+
+
+## Gleason score - biopsy
+### CS SITE-SPECIFIC FACTOR 8 and gleasonScoreClinical
+**For 2015:**
+csSiteSpecificFactor8* categorize as:
+
+- less than <=6: “002”-“006”
+- 7: “007”
+- 8-10: “008 – “010”
+- Unknown/not done “000”, “988”, “998”, “999”
+
+
+**For 2016-2017:**
+csSiteSpecificFactor8* categorize as:
+
+- less than <=6: “002”-“006”
+- 7: “007”
+- 8-10: “008 – “010”
+- Unknown/not done “000”, “988”, “998”, “999”
+
+**For 2018:**
+gleasonScoreClinical categorize as:
+
+- less than <=6: “02”-“06”
+- 7: “07”
+- 8-10: “08 – “10”
+- Unknown/not done “”X7”, “X8”, “X9”
+
+### Gleason Categories based on biopsy:
+
+- Low risk 
+  + Gleason score <= 6
+- Intermediate risk 
+  + Gleason score = 7
+- High risk 
+  + Gleason score >= 8
+
+```{r gleason_biopsy, message=FALSE, results='asis'}
+st_css() #IMPORTANT!
+  #cssitespecificfactor8 <- as.factor(trimws(d[,"cssitespecificfactor8"]))
+  cssitespecificfactor8 <- trimws(d[,"cssitespecificfactor8"])
+  cssitespecificfactor8 <- sub("^0+", "", cssitespecificfactor8)
+  
+  cssitespecificfactor8[which(cssitespecificfactor8=="")]<-NA
+  cssitespecificfactor8[which(cssitespecificfactor8=="988")]<-NA
+  cssitespecificfactor8[which(cssitespecificfactor8=="998")]<-NA
+  cssitespecificfactor8[which(cssitespecificfactor8=="999")]<-NA
+
+  gleasonscoreclinical <- trimws(d[,"gleasonscoreclinical"])
+  gleasonscoreclinical <- sub("^0+", "", gleasonscoreclinical)
+  gleasonscoreclinical[which(gleasonscoreclinical=="X7")]<-NA
+  gleasonscoreclinical[which(gleasonscoreclinical=="X8")]<-NA
+  gleasonscoreclinical[which(gleasonscoreclinical=="X9")]<-NA
+  
+  Gleason_biopsy <- as.factor(ifelse(is.na(cssitespecificfactor8), gleasonscoreclinical, cssitespecificfactor8))
+
+  gleason_category <- as.factor(unlist(lapply(as.character(Gleason_biopsy), FUN=function(gleason_v) {
+    switch(gleason_v,
+           `NA`=NA,
+           "2"="low",
+           "3"="low",
+           "4"="low",
+           "5"="low",
+           "6"="low",
+           "7"="med",
+           "8"="high",
+           "9"="high",
+           "10"="high", NA)})))
+    gleason_category <- factor(gleason_category, levels=c("low", "med", "high"))
+    
+summarytools::view(dfSummary(Gleason_biopsy, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE ), method = "render")
+
+summarytools::view(dfSummary(gleason_category, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE ), method = "render")
+
+
+```
+
+## Gleason score - radical prostatectomy
+### CS SITE-SPECIFIC FACTOR 10 and gleasonScorePathological
+**For 2015:**
+csSiteSpecificFactor10* categorize as:
+
+- less than <=6: “002”-“006”
+- 7: “007”
+- 8-10: “008 – “010”
+- Unknown/not done “000”, “988”, “998”, “999”
+
+**For 2016-2017:**
+csSiteSpecificFactor10* categorize as:
+
+- less than <=6: “002”-“006”
+- 7: “007”
+- 8-10: “008 – “010”
+- Unknown/not done “000”, “988”, “998”, “999”
+
+**For 2018:**
+gleasonScorePathological categorize as: 
+
+- less than <=6: “02”-“06”
+- 7: “07”
+- 8-10: “08 – “10”
+- Unknown/not done “”X7”, “X8”, “X9”
+
+```{r gleason_path, message=FALSE, results='asis'}
+st_css() #IMPORTANT!
+  cssitespecificfactor10 <- trimws(d[,"cssitespecificfactor10"])
+  cssitespecificfactor10 <- sub("^0+", "", cssitespecificfactor10)
+  cssitespecificfactor10[which(cssitespecificfactor10=="988")]<-NA
+  cssitespecificfactor10[which(cssitespecificfactor10=="998")]<-NA
+  cssitespecificfactor10[which(cssitespecificfactor10=="999")]<-NA
+  
+  gleasonscorepathological <- trimws(d[,"gleasonscorepathological"])
+  gleasonscorepathological <- sub("^0+", "", gleasonscorepathological)
+  gleasonscorepathological[which(gleasonscorepathological=="X7")]<-NA
+  gleasonscorepathological[which(gleasonscorepathological=="X8")]<-NA
+  gleasonscorepathological[which(gleasonscorepathological=="X9")]<-NA
+  
+  Gleason_path <- as.factor(ifelse(is.na(cssitespecificfactor10), gleasonscorepathological, cssitespecificfactor10))
+
+summarytools::view(dfSummary(Gleason_path, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE ), method = "render")
+```
+
+
+## Gleason pattern - clinical
+### CS SITE-SPECIFIC FACTOR 7 and Gleasonpatternsclinical
+**For 2015:**
+csSiteSpecificFactor7 categorize as:
+
+- Primary pattern value, secondary pattern value
+- Unknown/not done “99”, “998”, “999”
+
+**For 2016-2017:**
+csSiteSpecificFactor7 categorize as:
+
+- Primary pattern value, secondary pattern value
+- Unknown/not done “99”, “998”, “999”
+
+**For 2018:**
+gleasonpatternspathological categorize as:
+
+- Primary pattern value, secondary pattern value
+- Unknown/not done “”X7”, “X8”, “X9”
+
+```{r gleason_pattern_clinical, message=FALSE, results='asis'}
+st_css() #IMPORTANT!
+  cssitespecificfactor7 <- trimws(d[,"cssitespecificfactor7"])
+  cssitespecificfactor7 <- sub("^0+", "", cssitespecificfactor7)
+  cssitespecificfactor7[which(cssitespecificfactor7=="099")]<-NA
+  cssitespecificfactor7[which(cssitespecificfactor7=="99")]<-NA
+  cssitespecificfactor7[which(cssitespecificfactor7=="988")]<-NA
+  cssitespecificfactor7[which(cssitespecificfactor7=="998")]<-NA
+  cssitespecificfactor7[which(cssitespecificfactor7=="999")]<-NA
+ 
+  gleasonpatternsclinical <- trimws(d[,"gleasonpatternsclinical"])
+  gleasonpatternsclinical <- sub("^0+", "", gleasonpatternsclinical)
+  gleasonpatternsclinical[which(gleasonpatternsclinical=="X6")]<-NA
+  gleasonpatternsclinical[which(gleasonpatternsclinical=="X7")]<-NA
+  gleasonpatternsclinical[which(gleasonpatternsclinical=="X9")]<-NA
+  
+  Gleason_pattern_clinical <- as.factor(ifelse(is.na(cssitespecificfactor7), gleasonpatternsclinical, cssitespecificfactor7))
+                                
+summarytools::view(dfSummary(Gleason_pattern_clinical, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE ), method = "render")
+
+```
+
+## Gleason pattern - pathology
+### CS SITE-SPECIFIC FACTOR 9 and gleasonpatternspathological
+**For 2015:**
+csSiteSpecificFactor9 categorize as:
+
+- Primary pattern value, secondary pattern value
+- Unknown/not done “99”, “998”, “999”
+
+**For 2016-2017:**
+csSiteSpecificFactor9 categorize as:
+
+- Primary pattern value, secondary pattern value
+- Unknown/not done “99”, “998”, “999”
+
+**For 2018:**
+gleasonpatternspathological categorize as:
+
+- Primary pattern value, secondary pattern value
+- Unknown/not done “”X6”, “X9”
+
+```{r gleason_pattern_pathology, message=FALSE, results='asis'}
+st_css() #IMPORTANT!
+  cssitespecificfactor9 <- trimws(d[,"cssitespecificfactor9"])
+  cssitespecificfactor9 <- sub("^0+", "", cssitespecificfactor9)
+  cssitespecificfactor9[which(cssitespecificfactor9=="99")]<-NA
+  cssitespecificfactor9[which(cssitespecificfactor9=="988")]<-NA
+  cssitespecificfactor9[which(cssitespecificfactor9=="998")]<-NA
+  cssitespecificfactor9[which(cssitespecificfactor9=="999")]<-NA
+ 
+  gleasonpatternspathological <- trimws(d[,"gleasonpatternspathological"])
+  gleasonpatternspathological <- sub("^0+", "", gleasonpatternspathological)
+  gleasonpatternspathological[which(gleasonpatternspathological=="X6")]<-NA
+  gleasonpatternspathological[which(gleasonpatternspathological=="X7")]<-NA
+  gleasonpatternspathological[which(gleasonpatternspathological=="X9")]<-NA
+  
+  Gleason_pattern_pathology <- as.factor(ifelse(is.na(cssitespecificfactor7), gleasonpatternspathological, cssitespecificfactor7))
+                                
+summarytools::view(dfSummary(Gleason_pattern_pathology, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE ), method = "render")
+
+```
+
+
+
+## Lymph Node Involvement
+### csLymphNodes and derivedSeerCombinedN and eodRegionalNodes
+**For 2015:**
+csLymphNodes categorize as: 
+
+- N0: “000”
+- N1: “100”, “800”
+- NX: “999”
+
+**For 2016-2017:**
+derivedSeerCombinedN categorize based on 1st 2 characters as: 
+
+- N0: “c0”, “p0”
+- N1: “c1”, “p1”
+- NX: “cX”, “pX”, “ “, “88”
+- or use combination of tnmClinN + tnmPathN variables to obtain equivalent of above (not implemented yet)
+
+**For 2018:**
+eodRegionalNodes categorize as: 
+
+- N0: “000”
+- N1: “300”, “800”
+- NX: “999”
+
+```{r lymph node involvement, message=FALSE, results='asis'}
+st_css() #IMPORTANT!
+  cslymphnodes <- trimws(d[,"cslymphnodes"])
+  cslymphnodes[which(cslymphnodes=="0")]<-"N0"
+  cslymphnodes[which(cslymphnodes=="000")]<-"N0"
+  cslymphnodes[which(cslymphnodes=="100")]<-"N1"
+  cslymphnodes[which(cslymphnodes=="800")]<-"N1"
+  cslymphnodes[which(cslymphnodes=="999")]<-"NX"
+
+  derivedseercombinedn <- trimws(d[,"derivedseercombinedn"])
+  derivedseercombinedn[which(derivedseercombinedn=="c0")]<-"N0"
+  derivedseercombinedn[which(derivedseercombinedn=="p0")]<-"N0"
+  derivedseercombinedn[which(derivedseercombinedn=="c1")]<-"N1"
+  derivedseercombinedn[which(derivedseercombinedn=="p1")]<-"N1"
+  derivedseercombinedn[which(derivedseercombinedn=="cX")]<-"NX"
+  derivedseercombinedn[which(derivedseercombinedn=="pX")]<-"NX"
+
+  eodregionalnodes <- trimws(d[,"eodregionalnodes"])
+  eodregionalnodes[which(eodregionalnodes=="0")]<- "N0"  # assume "0" is "N0"
+  eodregionalnodes[which(eodregionalnodes=="000")]<-"N0"
+  eodregionalnodes[which(eodregionalnodes=="300")]<-"N1"
+  eodregionalnodes[which(eodregionalnodes=="800")]<-"N1"
+  eodregionalnodes[which(eodregionalnodes=="888")]<-NA # assume "888" is NA
+  eodregionalnodes[which(eodregionalnodes=="999")]<-"NX"
+  
+  lymphNode_Involvment <- derivedseercombinedn  # use first derivedseercombinedn 
+  lymphNode_Involvment[is.na(lymphNode_Involvment)] <- cslymphnodes[is.na(lymphNode_Involvment)] # then cslymphnodes
+  lymphNode_Involvment[is.na(lymphNode_Involvment)] <- eodregionalnodes[is.na(lymphNode_Involvment)] # for 2018
+  
+  lymphNode_Involvment <- as.factor(lymphNode_Involvment)
+
+summarytools::view(dfSummary(lymphNode_Involvment, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE ), method = "render")
+```
+
+## Metastasis
+### csMetsAtDx and derivedSeerCombinedM and eodMets
+**For 2015:**
+csMetsAtDx categorize as: 
+
+- M0/MX: “00”  ,“99”
+- M1: “11”-“60”
+
+**For 2016-2017:**
+derivedSeerCombinedM categorize based on 1st 2 characters as: 
+
+- M0/MX: “c0”, “p0”, “ “, “88”
+- M1: “c1”, “p1”
+- or use combination of tnmClinM + tnmPathM to obtain equivalent of above (not implemented yet)
+
+**For 2018:**
+eodMets categorize as: 
+
+- M0/MX: “00”, “99”
+- M1: “10”-“70”
+
+```{r metastasis, message=FALSE, results='asis'}
+st_css() #IMPORTANT!
+  csmetsatdx <- trimws(d[,"csmetsatdx"])
+  csmetsatdx[which(csmetsatdx=="0")]<-"M0_MX"
+  csmetsatdx[which(csmetsatdx=="00")]<-"M0_MX"
+  csmetsatdx[which(csmetsatdx=="99")]<-"M0_MX"
+  csmetsatdx[which(csmetsatdx=="11")]<-"M1"
+  csmetsatdx[which(csmetsatdx=="12")]<-"M1"
+  csmetsatdx[which(csmetsatdx=="20")]<-"M1"
+  csmetsatdx[which(csmetsatdx=="30")]<-"M1"
+  csmetsatdx[which(csmetsatdx=="35")]<-"M1"
+  csmetsatdx[which(csmetsatdx=="38")]<-"M1"
+  csmetsatdx[which(csmetsatdx=="40")]<-"M1"
+  csmetsatdx[which(csmetsatdx=="50")]<-"M1"
+  csmetsatdx[which(csmetsatdx=="55")]<-"M1"
+  csmetsatdx[which(csmetsatdx=="60")]<-"M1"
+
+  derivedseercombinedm <- trimws(d[,"derivedseercombinedm"])
+  derivedseercombinedm <- sub("A+$", "", derivedseercombinedm) # remove trailing "A"
+  derivedseercombinedm <- sub("B+$", "", derivedseercombinedm)
+  derivedseercombinedm <- sub("C+$", "", derivedseercombinedm)
+  derivedseercombinedm[which(derivedseercombinedm=="c0")]<-"M0_MX"
+  derivedseercombinedm[which(derivedseercombinedm=="p0")]<-"M0_MX"
+  derivedseercombinedm[which(derivedseercombinedm=="c1")]<-"M1"
+  derivedseercombinedm[which(derivedseercombinedm=="p1")]<-"M1"
+  derivedseercombinedm[which(derivedseercombinedm=="88")]<-"M0_MX"
+
+  eodmets <- trimws(d[,"eodmets"])
+  eodmets[which(eodmets=="0")]<-"M0_MX" # assume "0" is "M0/MX"
+  eodmets[which(eodmets=="00")]<-"M0_MX"
+  eodmets[which(eodmets=="99")]<-"M0_MX"
+  eodmets[which(eodmets=="10")]<-"M1"
+  eodmets[which(eodmets=="30")]<-"M1"
+  eodmets[which(eodmets=="50")]<-"M1"
+  eodmets[which(eodmets=="70")]<-"M1"
+  eodmets[which(eodmets=="88")]<-"M0_MX" 
+  
+  metastasis <- derivedseercombinedm  # use first derivedseercombinedm 
+  metastasis[is.na(metastasis)] <- csmetsatdx[is.na(metastasis)] # then csmetsatdx
+  metastasis[is.na(metastasis)] <- eodmets[is.na(metastasis)] # for 2018
+  
+  metastasis <- as.factor(metastasis)
+
+summarytools::view(dfSummary(metastasis, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE ), method = "render")
+```
+
+## Summary Stage
+### seerSummaryStage2000 and summaryStage2018
+**For 2015:**
+seerSummaryStage2000 categorize as: 
+
+- Localized: “1”
+- Regional: “2”-“5”
+- Distant: “7”
+- Unknown: “9”
+
+**For 2016-2017:**
+seerSummaryStage2000 categorize as: 
+
+- Localized: “1”
+- Regional: “2”-“5”
+- Distant: “7”
+- Unknown: “9”
+
+**For 2018:**
+summaryStage2018 categorize as: 
+
+- Localized: “1”
+- Regional: “2”-“5”
+- Distant: “7”
+- Unknown: “9”
+
+
+```{r summary stage, message=FALSE, results='asis'}
+st_css() #IMPORTANT!
+  seersummarystage2000 <- trimws(d[,"seersummarystage2000"])
+  seersummarystage2000.cat <- as.factor(unlist(lapply(seersummarystage2000, FUN=function(v) { 
+                ifelse(is.na(v), NA, 
+                  ifelse(as.numeric(v)==1, "Localized",
+                    ifelse(as.numeric(v)>=2 && as.numeric(v)<=5, "Regional",
+                      ifelse(as.numeric(v)==7, "Distant", NA)))) })))
+
+  summarystage2018 <- trimws(d[,"summarystage2018"])
+  summarystage2018.cat <- as.factor(unlist(lapply(summarystage2018, FUN=function(v) { 
+                ifelse(is.na(v), NA, 
+                  ifelse(as.numeric(v)==1, "Localized",
+                    ifelse(as.numeric(v)>=2 && as.numeric(v)<=4, "Regional",
+                      ifelse(as.numeric(v)==7, "Distant", NA)))) })))
+
+  summarystage <- seersummarystage2000.cat  # use first seersummarystage2000 
+  summarystage[is.na(summarystage)] <- summarystage2018.cat[is.na(summarystage)] # then summarystage2018
+  
+  summarystage <- as.factor(summarystage)
+
+summarytools::view(dfSummary(summarystage, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE ), method = "render")
+```
+
+## D'Amico Risk Group Classification for Recurrance
+- Low risk 
+  + (PSA < 10 AND Gleason score <= 6) OR Clinical Stage <= T2a
+- Intermediate risk 
+  + (10 < PSA < 20 AND Gleason score = 7) OR Clinical Stage = T2b
+- High risk 
+  + (PSA >= 20 AND Gleason score >= 8) OR Clinical Stage = T2c,T3/4
+
+```{r D_Amico risk groups, message=FALSE, results='asis',warning=FALSE}
+  D_Amico_psa_category <- as.factor(ifelse(is.na(psa), NA, 
+                       ifelse(psa < 10, "low", 
+                              ifelse(psa > 20, "high", "med"))))
+
+  D_Amico_clinical_stage_category <- as.factor(unlist(lapply(as.character(stage_clinical), FUN=function(stage) { switch(stage,
+                                    "0"="low",
+                                    "1"="low",
+                                    "1A"="low",
+                                    "1B"="low",
+                                    "1C"="low",
+                                    "2"="low",
+                                    "2A"="low",
+                                    "lteq_2A"="low",
+                                    "2B"="med",
+                                    "2B_C"="med",
+                                    "2C"="high",
+                                    "3"="high",
+                                    "3_4"="high",
+                                    "3A"="high",
+                                    "3B"="high",
+                                    "4"="high",
+                                    NA)})))
+
+    D_Amico_gleason_category <- as.factor(unlist(lapply(as.character(Gleason_biopsy), FUN=function(gleason_v) {
+    switch(gleason_v,
+           `NA`=NA,
+           "2"="low",
+           "3"="low",
+           "4"="low",
+           "5"="low",
+           "6"="low",
+           "7"="med",
+           "8"="high",
+           "9"="high",
+           "10"="high", NA)})))
+
+    df <- data.frame(D_Amico_psa_category, D_Amico_clinical_stage_category, D_Amico_gleason_category)
+    df <-mutate(df, D_Amico_risk_groups = as.factor(case_when(
+      (D_Amico_psa_category=="low" & D_Amico_gleason_category=="low") | D_Amico_clinical_stage_category=="low" ~ "low",
+      (D_Amico_psa_category=="med" & D_Amico_gleason_category=="med") | D_Amico_clinical_stage_category=="med" ~ "med",
+      (D_Amico_psa_category=="high" & D_Amico_gleason_category=="high") | D_Amico_clinical_stage_category=="high" ~ "high",
+      is.na(D_Amico_psa_category) & is.na(D_Amico_gleason_category) & is.na(D_Amico_clinical_stage_category) ~ NA_character_,
+      TRUE~"Other"
+    )))
+  D_Amico_risk_groups <- df$D_Amico_risk_groups
+  D_Amico_risk_groups <- factor(D_Amico_risk_groups, levels=c("low", "med", "high"))
+summarytools::view(dfSummary(D_Amico_risk_groups, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE ), method = "render")
+
+
+```
+
+
+## Aggressiveness based on Grant (without PSA)
+
+- Metastatic (M1)
+- High risk
+  + (Clinical Stage = T3/T4 OR Gleason score >= 8) OR N1
+- Intermediate Risk
+  + (Clinical Stage = T2b/T2c OR Gleason score = 7) AND N0 AND (M0 OR missing metastasis) 
+- Low risk 
+  + (Clinical Stage = T2a/T1 AND Gleason score <= 6) AND N0 AND (M0 OR missing metastasis)
+
+```{r aggressiveness based on grant, message=FALSE, results='asis',warning=FALSE}
+  grant_clinical_stage_category <- as.factor(unlist(lapply(as.character(stage_clinical), FUN=function(stage) { switch(stage,
+                                    "0"="low",
+                                    "1"="low",
+                                    "1A"="low",
+                                    "1B"="low",
+                                    "1C"="low",
+                                    "2"="low",
+                                    "2A"="low",
+                                    "lteq_2A"="low",
+                                    "2B"="med",
+                                    "2B_C"="med",
+                                    "2C"="med",
+                                    "3"="high",
+                                    "3_4"="high",
+                                    "3A"="high",
+                                    "3B"="high",
+                                    "4"="high",
+                                    `NA`=NA, NA)})))
+
+    grant_gleason_category <- as.factor(unlist(lapply(as.character(Gleason_biopsy), FUN=function(gleason_v) {
+    switch(gleason_v,
+           `NA`=NA,
+           "2"="low",
+           "3"="low",
+           "4"="low",
+           "5"="low",
+           "6"="low",
+           "7"="med",
+           "8"="high",
+           "9"="high",
+           "10"="high", NA)})))
+
+    df <- data.frame(grant_clinical_stage_category, grant_gleason_category, metastasis, summarystage, lymphNode_Involvment)
+    df <-mutate(df, aggressiveness_grant = as.factor(case_when(
+      summarystage=="Distant" ~ "Metastatic",
+      (grant_gleason_category=="high" | grant_clinical_stage_category=="high") | lymphNode_Involvment=="N1" ~ "high",
+      (grant_gleason_category=="med" | grant_clinical_stage_category=="med") & (lymphNode_Involvment=="N0" & (metastasis=="M0_MX" | is.na(metastasis))) ~ "med", 
+      (grant_gleason_category=="low" & grant_clinical_stage_category=="low") & (lymphNode_Involvment=="N0" & (metastasis=="M0_MX" | is.na(metastasis))) ~ "low", 
+      is.na(lymphNode_Involvment) & is.na(grant_gleason_category) & is.na(grant_clinical_stage_category) & is.na(metastasis) ~ NA_character_,
+      TRUE~"Other"
+    )))
+  aggressiveness_grant <- df$aggressiveness_grant
+  aggressiveness_grant <- factor(aggressiveness_grant, levels=c("low", "med", "high"))
+summarytools::view(dfSummary(aggressiveness_grant, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE ), method = "render")
+
+
+```
+
+## Aggressiveness for Etiologic Epidemiologic Research
+Hurwitz et al. Recommended Definitions of Aggressive Prostate Cancer for Etiologic Epidemiologic Research. JNCI 2021 Jun; 113(6): 727-734.
+
+- Aggressive
+  + T4 OR N1 OR M1 OR Gleason score >= 8 
+- Non-aggressive 
+  + Other
+
+
+```{r aggressiveness based on SEER-18 epi analysis, message=FALSE, results='asis',warning=FALSE}
+  epi_clinical_stage_category <- as.factor(unlist(lapply(as.character(stage_clinical), FUN=function(stage) { switch(stage,
+                                    "0"="non_agg",
+                                    "1"="non_agg",
+                                    "1A"="non_agg",
+                                    "1B"="non_agg",
+                                    "1C"="non_agg",
+                                    "2"="non_agg",
+                                    "2A"="non_agg",
+                                    "lteq_2A"="non_agg",
+                                    "2B"="non_agg",
+                                    "2B_C"="non_agg",
+                                    "2C"="non_agg",
+                                    "3"="non_agg",
+                                    "3_4"="non_agg",
+                                    "3A"="non_agg",
+                                    "3B"="non_agg",
+                                    "4"="agg",
+                                    `NA`=NA, NA)})))
+
+    epi_gleason_category <- as.factor(unlist(lapply(as.character(Gleason_biopsy), FUN=function(gleason_v) {
+    switch(gleason_v,
+           `NA`=NA,
+           "2"="non_agg",
+           "3"="non_agg",
+           "4"="non_agg",
+           "5"="non_agg",
+           "6"="non_agg",
+           "7"="non_agg",
+           "8"="agg",
+           "9"="agg",
+           "10"="agg")})))
+
+    df <- data.frame(epi_clinical_stage_category, epi_gleason_category, metastasis, summarystage, lymphNode_Involvment)
+    df <-mutate(df, aggressiveness_epi = as.factor(case_when(
+      epi_clinical_stage_category=="agg" | metastasis=="M1" | lymphNode_Involvment=="N1" | epi_gleason_category=="agg" ~ "agg",
+      is.na(lymphNode_Involvment) & is.na(epi_gleason_category) & is.na(epi_clinical_stage_category) & is.na(metastasis) ~ NA_character_,
+      TRUE~"non_agg"
+    )))
+  aggressiveness_epi <- df$aggressiveness_epi
+  aggressiveness_epi <- factor(aggressiveness_epi, levels=c("non_agg", "agg"))
+summarytools::view(dfSummary(aggressiveness_epi, style = 'grid', max.distinct.values = 50, plain.ascii = FALSE, valid.col = FALSE, headings = FALSE ), method = "render")
+
+
+```
+
+## Cancer of the Prostate Risk Assessment (CAPRA) score
+### nine-level version of the score (CAPRA-9) that excludes PPC
+https://urology.ucsf.edu/research/cancer/prostate-cancer-risk-assessment-and-the-ucsf-capra-score#.YjIIlC-B2Ak
+
+## Risk Stratification according to the National Comprehensive Cancer Network (NCCN)
+https://www.uptodate.com/contents/image?imageKey=ONC%2F118962
+
+
+```{r create and write disease characteristics, message=FALSE, results='asis',warning=FALSE}
+# disease_characteristics <- data.frame(d$respondid, yearDx, psa, cssitespecificfactor1, psalabvalue,
+#                                       stage_clinical, stage_clinical_category, tnmclint, csextension, eodprimarytumor,
+#                                       Gleason_biopsy, gleason_category, cssitespecificfactor8, gleasonscoreclinical,
+#                                       Gleason_path, cssitespecificfactor10, gleasonscorepathological,
+#                                       lymphNode_Involvment, metastasis, summarystage,
+#                                       D_Amico_risk_groups, aggressiveness_grant, aggressiveness_epi)
+
+disease_characteristics <- data.frame(d$respondid, yearDx,
+                                      psa, psa_category,
+                                      stage_clinical, stage_clinical_category,
+                                      Gleason_biopsy, gleason_category,
+                                      Gleason_path,
+                                      Gleason_pattern_clinical, Gleason_pattern_pathology,
+                                      lymphNode_Involvment, metastasis, summarystage,
+                                      D_Amico_risk_groups, aggressiveness_grant, aggressiveness_epi)
+
+#write.table(disease_characteristics, file=paste("DiseaseCharacteristics", format(Sys.time(), "%b_%d_%Y"), "txt", sep="."), row.names=F, sep="\t", quote=F)
+
+save(disease_characteristics, file=paste("../Data/vregall_analysis_", format(Sys.time(), "%Y%m%d"), ".Rda", sep=""))
+
+```
+
+
