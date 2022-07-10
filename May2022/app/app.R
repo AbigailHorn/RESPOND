@@ -42,7 +42,7 @@ varsToSelect <- colnames(b)
 
 ui <- fluidPage(theme = shinytheme("superhero"),
                 
-                titlePanel("Disease Characteristics by Survey Variables"),
+                titlePanel("RESPOND Variable Investigation"),
                 
                 sidebarLayout(
                   sidebarPanel(
@@ -53,13 +53,13 @@ ui <- fluidPage(theme = shinytheme("superhero"),
                     
                     wellPanel(
                       p(helpText("Select the factor variable(s) that will produce the rows"),
-                        selectInput("selectRows","Disease Characteristic:", choices=varsToSelect, 
+                        selectInput("selectRows","Row Variable:", choices=varsToSelect, 
                                     multiple=TRUE, selected = c("Breast_Yes", "Ovarian_Yes","Colorectal_Yes", "Lung_Yes", "Other_Cancer_Yes", "Any_Cancer_Yes"))
                       )),
                     
                     wellPanel(
                       p(helpText("Select the factor variable that will produce the columns"),
-                        selectInput("selectCols","Survey Variable:", choices=varsToSelect[varsToSelect != "psa"], 
+                        selectInput("selectCols","Column Variable:", choices=varsToSelect[varsToSelect != "psa"], 
                                     multiple=FALSE, selected = "aggressiveness_grant")
                       ))
                     
@@ -131,4 +131,4 @@ shinyApp(ui = ui, server = server)
 # library(rsconnect)
 # rsconnect::deployApp('Table1')
 # rsconnect::deployApp(path(here::here("May2022/app")), appName = "app", appTitle = "Table1")
-
+# rsconnect::deployApp(path(here::here("May2022/app")), appName = "appMay", appTitle = "Table1")
