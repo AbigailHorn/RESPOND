@@ -119,4 +119,7 @@ shinyApp(ui = ui, server = server)
 
 ## To update:
 # library(rsconnect)
-# rsconnect::deployApp('testing/html-test')
+# rsconnect::deployApp(path(here::here("May2022/app")), appName = "appMay", appTitle = "Table1")
+
+
+

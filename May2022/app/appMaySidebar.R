@@ -174,3 +174,13 @@ server <- function(input, output) {
 }
 
 shinyApp(ui = ui, server = server)
+
+
+## To update:
+# library(rsconnect)
+# rsconnect::deployApp(path(here::here("May2022/app")), appName = "appMaySidebar", appTitle = "Table1")
+
+
+
+
+
